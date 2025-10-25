@@ -1,0 +1,35 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
+        x:Class="Sup.MainChatWindow"
+        Title="Чаты">
+    <Grid ColumnDefinitions="250,*">
+        <!-- Левая панель: поиск и список пользователей -->
+        <StackPanel Grid.Column="0" Margin="10" VerticalAlignment="Stretch">
+            <TextBox Watermark="Поиск пользователя..." Margin="0,0,0,10"/>
+            <ListBox x:Name="UsersListBox" Margin="0,0,0,10" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+                <ListBoxItem Content="Пользователь 1 (заглушка)"/>
+                <ListBoxItem Content="Пользователь 2 (заглушка)"/>
+            </ListBox>
+            <Button Content="+ Новый диалог" Margin="0,10,0,0"/>
+        </StackPanel>
+        
+        <!-- Правая панель: диалог -->
+        <Grid Grid.Column="1" Margin="10" RowDefinitions="Auto,*,Auto">
+            <!-- Имя пользователя сверху -->
+            <TextBlock Text="Имя пользователя" FontSize="22" FontWeight="Bold" Grid.Row="0"/>
+            <!-- Список сообщений, прокручиваемый -->
+            <ListBox x:Name="MessagesListBox" Grid.Row="1" Margin="0,0,0,0">
+                <ListBoxItem Content="Привет, это заглушка!"/>
+                <ListBoxItem Content="И это тоже."/>
+            </ListBox>
+            <!-- Ввод сообщения снизу, на всю ширину -->
+            <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+                <TextBox x:Name="MessageTextBox" Watermark="Введите сообщение..." Grid.Column="0" VerticalAlignment="Center" Height="32" Margin="0,0,10,0"/>
+                <Button x:Name="SendMessageButton" Content="Отправить" Grid.Column="1" MinWidth="100" VerticalAlignment="Center" Height="32"/>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="Sup.MainWindow"
+        Title="Sup">
+    <!-- Основной Grid для позиционирования -->
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="100">
+        <TextBlock Text="Вход или регистрация" FontSize="28" HorizontalAlignment="Center" Margin="0,0,0,16" Grid.Row="0" />
+
+        <StackPanel Orientation="Vertical" Grid.Row="1" Margin="0,0,0,8">
+            <TextBox x:Name="LoginTextBox" Watermark="Введите логин" Width="270"/>
+        </StackPanel>
+        <StackPanel Orientation="Vertical" Grid.Row="2" Margin="0,0,0,16">
+            <TextBox x:Name="PasswordTextBox" Watermark="Введите пароль" Width="270" PasswordChar="*"/>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Grid.Row="3" Spacing="10">
+            <Button x:Name="LoginButton" Content="Войти" Width="100"/>
+            <Button x:Name="RegisterButton" Content="Зарегистрироваться" Width="170"/>
+        </StackPanel>
+        <TextBlock x:Name="StatusMessage" Grid.Row="4"
+                   HorizontalAlignment="Center"
+                   FontWeight="Bold"
+                   FontSize="16"
+                   Foreground="Transparent"
+                   Margin="0,32,0,0"/>
+    </Grid>
+
+    <!-- Окно регистрации (задаётся позже через C#, по умолчанию невидимо) -->
+</Window>
