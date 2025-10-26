@@ -6,6 +6,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Avalonia.Media;
+using System.Text.Json.Serialization;
 
 namespace Sup
 {
@@ -50,10 +51,8 @@ namespace Sup
 
                 if (response.IsSuccessStatusCode)
                 {
-                    // Успех авторизации
                     StatusMessage.Text = "Успешный вход!";
                     StatusMessage.Foreground = Brushes.Green;
-                    // Открываем главное окно чата и закрываем текущее окно
                     var chatWindow = new MainChatWindow();
                     chatWindow.Show();
                     this.Close();
@@ -115,5 +114,13 @@ namespace Sup
                 StatusMessage.Foreground = Brushes.Red;
             }
         }
+    }
+
+    public class AuthResponse
+    {
+        [JsonPropertyName("accessToken")]
+        public string accessToken { get; set; } = string.Empty;
+        [JsonPropertyName("refreshToken")]
+        public string refreshToken { get; set; } = string.Empty;
     }
 }

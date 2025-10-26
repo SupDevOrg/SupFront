@@ -5,21 +5,30 @@
         mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
         x:Class="Sup.MainChatWindow"
         Title="Чаты">
-    <Grid ColumnDefinitions="250,*">
+    <Window.Resources>
+        <!-- Иконка "настройки" в виде SVG-path, чтобы XAML был чище и понятнее -->
+        <x:String x:Key="SettingsIconPath">M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-2.83.48-5.77-.19-7.93-2.35-3.12-3.12-3.12-8.19 0-11.31s8.19-3.12 11.31 0 3.12 8.19 0 11.31c-2.16 2.17-5.1 2.84-7.93 2.35V17.93zM12 6v6l5.25 3.15-.77 1.23L12 13V6z</x:String>
+    </Window.Resources>
+    <Grid ColumnDefinitions="250,*" RowDefinitions="*,Auto">
         <!-- Левая панель: кнопка поиска пользователей, поиск, список диалогов -->
-        <StackPanel Grid.Column="0" Margin="10" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+        <StackPanel x:Name="LeftSearchPanel" Grid.Column="0" Grid.Row="0" Margin="10" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
             <Button x:Name="SearchUsersButton" Content="Поиск пользователей" Margin="0,0,0,10" Width="220" HorizontalAlignment="Stretch"/>
             <TextBox x:Name="DialogsSearchTextBox" Watermark="Поиск среди ваших диалогов..." Margin="0,0,0,10" Width="220" HorizontalAlignment="Stretch"/>
             <ListBox x:Name="UsersListBox" Margin="0,0,0,10" VerticalAlignment="Stretch" HorizontalAlignment="Stretch"/>
         </StackPanel>
-
+        
+        <!-- Левая нижняя панель с юзером и иконкой настроек -->
+        <StackPanel Grid.Column="0" Grid.Row="1" Orientation="Horizontal" Margin="10,0,10,10" HorizontalAlignment="Stretch" VerticalAlignment="Bottom">
+            <TextBlock x:Name="UserNameLabel" Text="user" FontWeight="Bold" VerticalAlignment="Center" />
+            <Button x:Name="SettingsButton" Content="Настройки" Width="100" Height="32" Margin="10,0,0,0" VerticalAlignment="Center"/>
+        </StackPanel>
+        
         <!-- Правая часть: диалог или глобальный поиск, видимость регулируется кодом -->
-        <Grid Grid.Column="1" Margin="10" RowDefinitions="Auto,*,Auto">
+        <Grid x:Name="MainPanels" Grid.Column="1" Grid.Row="0" Margin="10" RowDefinitions="Auto,*,Auto">
             <!-- Режим диалога -->
             <StackPanel x:Name="ChatPanel" Grid.RowSpan="3">
                 <TextBlock x:Name="ChatUserName" Text="Имя пользователя" FontSize="22" FontWeight="Bold" Margin="0,0,0,10"/>
                 <ListBox x:Name="MessagesListBox" Height="400" Margin="0,0,0,10"/>
-                <!-- Ввод сообщения снизу, на всю ширину -->
                 <Grid ColumnDefinitions="*,Auto" Margin="0,10,0,0">
                     <TextBox x:Name="MessageTextBox" Watermark="Введите сообщение..." Grid.Column="0" VerticalAlignment="Center" Height="32" Margin="0,0,10,0"/>
                     <Button x:Name="SendMessageButton" Content="Отправить" Grid.Column="1" MinWidth="100" VerticalAlignment="Center" Height="32"/>
@@ -32,5 +41,29 @@
                 <ListBox x:Name="GlobalUsersListBox"/>
             </StackPanel>
         </Grid>
+        <!-- Правая панель настроек, видимость регулируется кодом -->
+        <StackPanel x:Name="SettingsPanel" Grid.Column="0" Grid.Row="0" Margin="10" IsVisible="False">
+            <Button x:Name="BackFromSettingsButton" Content="Назад" Width="100" HorizontalAlignment="Left" Margin="0,0,0,10"/>
+            <Button x:Name="VoiceSettingsButton" Content="Голос" Width="220" HorizontalAlignment="Left" Margin="0,0,0,10"/>
+        </StackPanel>
+        <!-- Панель настроек голоса справа (скрыта по умолчанию) -->
+        <StackPanel x:Name="VoicePanel" Grid.Column="1" Grid.Row="0" Margin="10" IsVisible="False">
+            <!-- Выбор микрофона -->
+            <TextBlock Text="Микрофон:" FontWeight="Bold" Margin="0,0,0,5"/>
+            <ComboBox x:Name="MicrophoneComboBox" Margin="0,0,0,10"/>
+            
+            <!-- Выбор наушников/динамиков -->
+            <TextBlock Text="Звук:" FontWeight="Bold" Margin="0,0,0,5"/>
+            <ComboBox x:Name="AudioOutputComboBox" Margin="0,0,0,10"/>
+            
+            <!-- Кнопка проверки и слайдер громкости -->
+            <Grid ColumnDefinitions="Auto,*" Margin="0,10,0,0">
+                <Button x:Name="TestVoiceButton" Content="Проверить голос" Grid.Column="0" Width="200" Margin="0,0,10,0"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Громкость с микрофона:" FontWeight="Bold" Margin="0,0,0,5"/>
+                    <Slider x:Name="VoiceVolumeSlider" IsEnabled="False" Minimum="0" Maximum="100" Value="0" TickFrequency="10"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
     </Grid>
 </Window>
