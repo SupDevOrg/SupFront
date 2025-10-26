@@ -5,10 +5,6 @@
         mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
         x:Class="Sup.MainChatWindow"
         Title="Чаты">
-    <Window.Resources>
-        <!-- Иконка "настройки" в виде SVG-path, чтобы XAML был чище и понятнее -->
-        <x:String x:Key="SettingsIconPath">M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-2.83.48-5.77-.19-7.93-2.35-3.12-3.12-3.12-8.19 0-11.31s8.19-3.12 11.31 0 3.12 8.19 0 11.31c-2.16 2.17-5.1 2.84-7.93 2.35V17.93zM12 6v6l5.25 3.15-.77 1.23L12 13V6z</x:String>
-    </Window.Resources>
     <Grid ColumnDefinitions="250,*" RowDefinitions="*,Auto">
         <!-- Левая панель: кнопка поиска пользователей, поиск, список диалогов -->
         <StackPanel x:Name="LeftSearchPanel" Grid.Column="0" Grid.Row="0" Margin="10" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
