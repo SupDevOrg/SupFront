@@ -4,7 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
         x:Class="Sup.MainChatWindow"
-        Title="Чаты">
+        Title="Sup">
     <Grid ColumnDefinitions="250,*" RowDefinitions="*,Auto">
         <!-- Левая панель: кнопка поиска пользователей, поиск, список диалогов -->
         <StackPanel x:Name="LeftSearchPanel" Grid.Column="0" Grid.Row="0" Margin="10" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
@@ -20,6 +20,7 @@
         </StackPanel>
         
         <!-- Правая часть: диалог или глобальный поиск, видимость регулируется кодом -->
+        <!-- Правая часть: диалог или глобальный поиск, видимость регулируется кодом -->
         <Grid x:Name="MainPanels" Grid.Column="1" Grid.Row="0" Margin="10" RowDefinitions="Auto,*,Auto">
             <!-- Режим диалога -->
             <StackPanel x:Name="ChatPanel" Grid.RowSpan="3">
@@ -30,14 +31,30 @@
                     <Button x:Name="SendMessageButton" Content="Отправить" Grid.Column="1" MinWidth="100" VerticalAlignment="Center" Height="32"/>
                 </Grid>
             </StackPanel>
+            
             <!-- Режим глобального поиска -->
-            <StackPanel x:Name="GlobalSearchPanel" Grid.RowSpan="3" IsVisible="False">
-                <Button x:Name="BackToChatButton" Content="Назад" Width="100" Margin="0,0,0,16"/>
-                <TextBox x:Name="SearchGlobalTextBox" Watermark="Введите имя для поиска" Margin="0,0,0,10"/>
-                <ListBox x:Name="GlobalUsersListBox"/>
-            </StackPanel>
+            <Grid x:Name="GlobalSearchPanel" Grid.RowSpan="3" IsVisible="False" RowDefinitions="Auto,Auto,*,Auto">
+                <!-- Кнопка назад -->
+                <Button x:Name="BackToChatButton" Content="Назад" Width="100" Margin="0,0,0,16" Grid.Row="0"/>
+                
+                <!-- Поле поиска -->
+                <TextBox x:Name="SearchGlobalTextBox" Watermark="Введите имя для поиска" Margin="0,0,0,10" Grid.Row="1"/>
+                
+                <!-- Список пользователей - занимает всё доступное пространство -->
+                <ListBox x:Name="GlobalUsersListBox" Grid.Row="2" Margin="0,0,0,10"/>
+                
+                <!-- Панель пагинации - зафиксирована снизу -->
+                <Border Grid.Row="3" Background="Transparent" Padding="0,10,0,0">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Bottom">
+                        <Button x:Name="PrevPageButton" Content="← Назад" IsEnabled="False"/>
+                        <TextBlock x:Name="PageInfoText" Text="Страница 1 из 1" Margin="10,0" VerticalAlignment="Center"/>
+                        <Button x:Name="NextPageButton" Content="Вперед →" IsEnabled="False"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Grid>
-        <!-- Правая панель настроек, видимость регулируется кодом -->
+
+        <!-- Панель настроек (слева) -->
         <StackPanel x:Name="SettingsPanel" Grid.Column="0" Grid.Row="0" Margin="10" IsVisible="False">
             <Button x:Name="BackFromSettingsButton" Content="Назад" Width="100" HorizontalAlignment="Left" Margin="0,0,0,10"/>
             <Button x:Name="VoiceSettingsButton" Content="Голос" Width="220" HorizontalAlignment="Left" Margin="0,0,0,10"/>

@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
+using Sup.ForTokens;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,55 +19,54 @@ namespace Sup
         private bool _isVoiceTestActive = false; // Флаг для отслеживания проверки голоса
         private WasapiCapture? _audioCapture; // Для захвата звука с микрофона
         private WasapiOut? _audioPlayback; // Для воспроизведения звука
+        private int _currentPage = 0;
+        private int _totalPages = 1;
+        private string _currentSearchQuery = string.Empty;
         private float _smoothVolume = 0; // Сглаженное значение громкости
 
-        public MainChatWindow()
+        public MainChatWindow(string username)
         {
             InitializeComponent();
+            ResetPagination();
+
+            UserNameLabel.Text = username;
+
             // События для кнопок
             SearchUsersButton.Click += OnSearchUsersClicked;
             BackToChatButton.Click += OnBackToChatClicked;
-            SearchGlobalTextBox.KeyUp += async (s, e) => await OnSearchGlobalChangedAsync();
+            SearchGlobalTextBox.KeyUp += async (s, e) => await OnSearchUsersAsync();
             GlobalUsersListBox.DoubleTapped += OnGlobalUserSelected;
             SettingsButton.Click += OnSettingsClicked;
             VoiceSettingsButton.Click += OnVoiceSettingsClicked;
             BackFromSettingsButton.Click += OnBackFromSettingsClicked;
             TestVoiceButton.Click += OnTestVoiceClicked;
+
+            // Обработчики для кнопок пагинации
+            PrevPageButton.Click += OnPrevPageClick;
+            NextPageButton.Click += OnNextPageClick;
         }
 
-        private void OnBackFromSettingsClicked(object? sender, RoutedEventArgs e)
-        {
-            // Скрываем все панели настроек и голоса, возвращаемся к чату
-            SettingsPanel.IsVisible = false;
-            VoicePanel.IsVisible = false;
-            MainPanels.IsVisible = true;
-            LeftSearchPanel.IsVisible = true;
-        }
 
-        private void OnSearchUsersClicked(object? sender, RoutedEventArgs e)
-        {
-            GlobalSearchPanel.IsVisible = true;
-            ChatPanel.IsVisible = false;
-        }
+        // Поиск ////////////////////////////////////
 
-        private void OnBackToChatClicked(object? sender, RoutedEventArgs e)
-        {
-            GlobalSearchPanel.IsVisible = false;
-            ChatPanel.IsVisible = true;
-        }
-
-        private async Task OnSearchGlobalChangedAsync()
+        private async Task PerformSearchAsync(int page = 0)
         {
             var query = SearchGlobalTextBox.Text ?? string.Empty;
             if (string.IsNullOrWhiteSpace(query))
             {
                 GlobalUsersListBox.ItemsSource = new List<string>();
+                ResetPagination();
                 return;
             }
+
             try
             {
-                // URL согласно документации сервера пользователей
-                var url = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(query)}?page=0&size=10";
+                // Сохраняем текущий запрос
+                _currentSearchQuery = query;
+                _currentPage = page;
+
+                // URL с пагинацией
+                var url = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(query)}?page={page}&size=8";
                 var response = await _httpClient.GetAsync(url);
 
                 if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
@@ -78,7 +78,6 @@ namespace Sup
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    // Добавляем больше информации об ошибке
                     var errorContent = await response.Content.ReadAsStringAsync();
                     Console.WriteLine($"Ошибка поиска: {response.StatusCode}, {errorContent}");
                     GlobalUsersListBox.ItemsSource = new List<string> { $"Ошибка поиска: {response.StatusCode}" };
@@ -86,19 +85,74 @@ namespace Sup
                 }
 
                 using var stream = await response.Content.ReadAsStreamAsync();
-
-                // Создаем класс для десериализации ответа согласно формату из документации
                 var searchResponse = await JsonSerializer.DeserializeAsync<SearchUsersResponse>(stream);
 
-                // Извлекаем только имена пользователей из ответа
-                var usernames = searchResponse?.Users?.Select(u => u.Username).ToList() ?? new List<string>();
-                GlobalUsersListBox.ItemsSource = usernames;
+                // Обновляем информацию о пагинации
+                if (searchResponse != null)
+                {
+                    _totalPages = searchResponse.TotalPages;
+                    UpdatePaginationInfo();
+
+                    // Извлекаем только имена пользователей из ответа
+                    var usernames = searchResponse.Users?.Select(u => u.Username).ToList() ?? new List<string>();
+                    GlobalUsersListBox.ItemsSource = usernames;
+                }
+                else
+                {
+                    ResetPagination();
+                    GlobalUsersListBox.ItemsSource = new List<string>();
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Ошибка при поиске: {ex.Message}");
                 GlobalUsersListBox.ItemsSource = new List<string> { "Ошибка сети" };
+                ResetPagination();
             }
+        }
+
+        // Метод для обновления информации о страницах
+        private void UpdatePaginationInfo()
+        {
+            PageInfoText.Text = $"Страница {_currentPage + 1} из {_totalPages}";
+            PrevPageButton.IsEnabled = _currentPage > 0;
+            NextPageButton.IsEnabled = _currentPage < _totalPages - 1;
+        }
+
+        // Сброс пагинации
+        private void ResetPagination()
+        {
+            _currentPage = 0;
+            _totalPages = 1;
+            PageInfoText.Text = "Страница 1 из 1";
+            PrevPageButton.IsEnabled = false;
+            NextPageButton.IsEnabled = false;
+        }
+
+        private void OnSearchUsersClicked(object? sender, RoutedEventArgs e)
+        {
+            GlobalSearchPanel.IsVisible = true;
+            ChatPanel.IsVisible = false;
+        }
+
+        // ИСПРАВЛЕННЫЙ МЕТОД - убраны параметры
+        private async Task OnSearchUsersAsync()
+        {
+            // Добавляем небольшую задержку чтобы не спамить запросами при быстром вводе
+            await Task.Delay(300);
+
+            // Если текст изменился во время задержки, отменяем предыдущий поиск
+            var currentQuery = SearchGlobalTextBox.Text ?? string.Empty;
+            if (currentQuery != _currentSearchQuery)
+            {
+                _ = PerformSearchAsync(0);
+            }
+        }
+
+        private void OnBackToChatClicked(object? sender, RoutedEventArgs e)
+        {
+            GlobalSearchPanel.IsVisible = false;
+            ChatPanel.IsVisible = true;
         }
 
         private void OnGlobalUserSelected(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -109,6 +163,37 @@ namespace Sup
                 GlobalSearchPanel.IsVisible = false;
                 ChatPanel.IsVisible = true;
             }
+        }
+
+        // Обработчик для кнопки "Назад"
+        private void OnPrevPageClick(object? sender, RoutedEventArgs e)
+        {
+            if (_currentPage > 0)
+            {
+                _ = PerformSearchAsync(_currentPage - 1);
+            }
+        }
+
+        // Обработчик для кнопки "Вперед"
+        private void OnNextPageClick(object? sender, RoutedEventArgs e)
+        {
+            if (_currentPage < _totalPages - 1)
+            {
+                _ = PerformSearchAsync(_currentPage + 1);
+            }
+        }
+        // Конец поиска ////////////////////////////////////
+
+
+
+
+        private void OnBackFromSettingsClicked(object? sender, RoutedEventArgs e)
+        {
+            // Скрываем все панели настроек и голоса, возвращаемся к чату
+            SettingsPanel.IsVisible = false;
+            VoicePanel.IsVisible = false;
+            MainPanels.IsVisible = true;
+            LeftSearchPanel.IsVisible = true;
         }
 
         private void OnSettingsClicked(object? sender, RoutedEventArgs e)

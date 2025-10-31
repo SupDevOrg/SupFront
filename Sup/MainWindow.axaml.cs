@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using Avalonia.Media;
 using System.Text.Json.Serialization;
+using Sup.ForTokens;
 
 namespace Sup
 {
@@ -63,7 +64,7 @@ namespace Sup
 
                         StatusMessage.Text = "Успешный вход!";
                         StatusMessage.Foreground = Brushes.Green;
-                        var chatWindow = new MainChatWindow();
+                        var chatWindow = new MainChatWindow(login);
                         chatWindow.Show();
                         this.Close();
                     }
