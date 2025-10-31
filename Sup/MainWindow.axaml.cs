@@ -18,8 +18,9 @@ namespace Sup
             // Навешиваем обработчики событий на кнопки
             LoginButton.Click += OnLoginClicked;
             RegisterButton.Click += OnRegisterClicked;
-        } 
+        }
 
+        // Обработчик для кнопки "Войти"
         // Обработчик для кнопки "Войти"
         private async void OnLoginClicked(object? sender, RoutedEventArgs e)
         {
@@ -29,7 +30,7 @@ namespace Sup
             // Очищаем сообщение
             StatusMessage.Text = string.Empty;
             StatusMessage.Foreground = Brushes.Transparent;
-            
+
             // Проверка полей
             if (string.IsNullOrWhiteSpace(login) || string.IsNullOrWhiteSpace(password))
             {
@@ -37,7 +38,7 @@ namespace Sup
                 StatusMessage.Foreground = Brushes.Red;
                 return;
             }
-            
+
             // Создаём http клиент
             using var client = new HttpClient();
             try
@@ -51,11 +52,26 @@ namespace Sup
 
                 if (response.IsSuccessStatusCode)
                 {
-                    StatusMessage.Text = "Успешный вход!";
-                    StatusMessage.Foreground = Brushes.Green;
-                    var chatWindow = new MainChatWindow();
-                    chatWindow.Show();
-                    this.Close();
+                    // Читаем ответ и получаем токены
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    var authResponse = JsonSerializer.Deserialize<AuthResponse>(responseContent);
+
+                    if (authResponse != null && !string.IsNullOrEmpty(authResponse.accessToken))
+                    {
+                        // СОХРАНЯЕМ ТОКЕНЫ В КЭШ - ключевой момент!
+                        await TokenManager.SaveTokensAsync(authResponse.accessToken, authResponse.refreshToken);
+
+                        StatusMessage.Text = "Успешный вход!";
+                        StatusMessage.Foreground = Brushes.Green;
+                        var chatWindow = new MainChatWindow();
+                        chatWindow.Show();
+                        this.Close();
+                    }
+                    else
+                    {
+                        StatusMessage.Text = "Ошибка: не удалось получить токен";
+                        StatusMessage.Foreground = Brushes.Red;
+                    }
                 }
                 else
                 {

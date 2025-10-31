@@ -1,19 +1,20 @@
-using System;
-using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using NAudio.CoreAudioApi;
+using NAudio.Wave;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
-using NAudio.Wave;
-using NAudio.CoreAudioApi;
-using System.Linq;
 
 namespace Sup
 {
     public partial class MainChatWindow : Window
     {
-        private HttpClient _httpClient = new HttpClient();
+        private readonly HttpClient _httpClient = HttpClientFactory.CreateAuthenticatedClient();
         private bool _isVoiceTestActive = false; // Флаг для отслеживания проверки голоса
         private WasapiCapture? _audioCapture; // Для захвата звука с микрофона
         private WasapiOut? _audioPlayback; // Для воспроизведения звука
@@ -64,19 +65,38 @@ namespace Sup
             }
             try
             {
-                var url = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(query)}";
+                // URL согласно документации сервера пользователей
+                var url = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(query)}?page=0&size=10";
                 var response = await _httpClient.GetAsync(url);
-                if (!response.IsSuccessStatusCode)
+
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {
-                    GlobalUsersListBox.ItemsSource = new List<string> { "Ошибка поиска :(" };
+                    TokenManager.ClearTokens();
+                    GlobalUsersListBox.ItemsSource = new List<string> { "Сессия истекла. Войдите снова." };
                     return;
                 }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Добавляем больше информации об ошибке
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"Ошибка поиска: {response.StatusCode}, {errorContent}");
+                    GlobalUsersListBox.ItemsSource = new List<string> { $"Ошибка поиска: {response.StatusCode}" };
+                    return;
+                }
+
                 using var stream = await response.Content.ReadAsStreamAsync();
-                var users = await JsonSerializer.DeserializeAsync<List<UserDto>>(stream);
-                GlobalUsersListBox.ItemsSource = users != null ? users.ConvertAll(u => u.username) : new List<string>();
+
+                // Создаем класс для десериализации ответа согласно формату из документации
+                var searchResponse = await JsonSerializer.DeserializeAsync<SearchUsersResponse>(stream);
+
+                // Извлекаем только имена пользователей из ответа
+                var usernames = searchResponse?.Users?.Select(u => u.Username).ToList() ?? new List<string>();
+                GlobalUsersListBox.ItemsSource = usernames;
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine($"Ошибка при поиске: {ex.Message}");
                 GlobalUsersListBox.ItemsSource = new List<string> { "Ошибка сети" };
             }
         }
@@ -375,11 +395,30 @@ namespace Sup
             }
         }
 
+        public class SearchUsersResponse
+        {
+            [JsonPropertyName("users")]
+            public List<UserDto> Users { get; set; } = new();
+
+            [JsonPropertyName("currentPage")]
+            public int CurrentPage { get; set; }
+
+            [JsonPropertyName("totalItems")]
+            public int TotalItems { get; set; }
+
+            [JsonPropertyName("totalPages")]
+            public int TotalPages { get; set; }
+        }
+
         public class UserDto
         {
-            public int id { get; set; }
-            public string username { get; set; }
+            [JsonPropertyName("id")]
+            public int Id { get; set; }
+
+            [JsonPropertyName("username")]
+            public string Username { get; set; } = string.Empty;
         }
+
     }
 }
 
