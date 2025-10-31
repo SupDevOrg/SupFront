@@ -6,7 +6,8 @@ namespace Sup
 {
     public partial class App : Application
     {
-        public static string ApiBaseUrl { get; } = "http://localhost:8080/api/v1/";
+        // ƒÀﬂ ÀŒ ¿À‹Õ€’ “≈—“Œ¬ «¿Ã≈Õ»“‹ ApiBaseUrl Õ¿ "http://localhost:8080/api/v1/"
+        public static string ApiBaseUrl { get; } = "http://81.200.152.249:80/api/v1/";
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
