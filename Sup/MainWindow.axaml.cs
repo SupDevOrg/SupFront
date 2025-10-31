@@ -43,7 +43,7 @@ namespace Sup
             try
             {
                 // URL вашего backend API
-                var url = "http://localhost:8081/api/v1/user/login";
+                var url = $"{App.ApiBaseUrl}user/login";
                 // Формируем json-запрос
                 var payload = new { username = login, password = password };
                 var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
@@ -91,7 +91,7 @@ namespace Sup
             using var client = new HttpClient();
             try
             {
-                var url = "http://localhost:8081/api/v1/user/register";
+                var url = $"{App.ApiBaseUrl}user/register";
                 var payload = new { username = login, password = password };
                 var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
                 var response = await client.PostAsync(url, content);

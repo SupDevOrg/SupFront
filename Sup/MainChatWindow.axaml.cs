@@ -64,7 +64,7 @@ namespace Sup
             }
             try
             {
-                var url = $"http://localhost:8081/api/v1/user/{Uri.EscapeDataString(query)}";
+                var url = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(query)}";
                 var response = await _httpClient.GetAsync(url);
                 if (!response.IsSuccessStatusCode)
                 {

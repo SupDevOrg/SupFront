@@ -16,7 +16,7 @@ namespace Sup
         public static AppBuilder BuildAvaloniaApp()
             => AppBuilder.Configure<App>()
                 .UsePlatformDetect()
-                .WithInterFont()
-                .LogToTrace();
+                .WithInterFont();
+                //.LogToTrace();
     }
 }
