@@ -1,0 +1,51 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Color x:Key="PrimaryColor">#FF6366F1</Color>
+  <Color x:Key="PrimaryColorHover">#FF4F46E5</Color>
+  <Color x:Key="PrimaryColorPressed">#FF4338CA</Color>
+  <Color x:Key="SecondaryColor">#FFF472B6</Color>
+  <Color x:Key="SecondaryColorHover">#FFEC4899</Color>
+  <Color x:Key="SecondaryColorPressed">#FFDB2777</Color>
+  <Color x:Key="SurfaceColor">#FF111827</Color>
+  <Color x:Key="SurfaceAltColor">#FF0F172A</Color>
+  <Color x:Key="SurfaceOverlayColor">#FF1E293B</Color>
+  <Color x:Key="Neutral100">#FFE2E8F0</Color>
+  <Color x:Key="Neutral300">#FF94A3B8</Color>
+  <Color x:Key="Neutral500">#FF64748B</Color>
+  <Color x:Key="Neutral700">#FF475569</Color>
+
+  <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}"/>
+  <SolidColorBrush x:Key="PrimaryHoverBrush" Color="{StaticResource PrimaryColorHover}"/>
+  <SolidColorBrush x:Key="PrimaryPressedBrush" Color="{StaticResource PrimaryColorPressed}"/>
+  <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource SecondaryColor}"/>
+  <SolidColorBrush x:Key="SecondaryHoverBrush" Color="{StaticResource SecondaryColorHover}"/>
+  <SolidColorBrush x:Key="SecondaryPressedBrush" Color="{StaticResource SecondaryColorPressed}"/>
+  <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}"/>
+  <SolidColorBrush x:Key="SurfaceAltBrush" Color="{StaticResource SurfaceAltColor}"/>
+  <SolidColorBrush x:Key="SurfaceOverlayBrush" Color="{StaticResource SurfaceOverlayColor}"/>
+  <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource Neutral100}"/>
+  <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource Neutral300}"/>
+  <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource Neutral500}"/>
+  <SolidColorBrush x:Key="OutlineBrush" Color="{StaticResource Neutral700}"/>
+
+  <FontFamily x:Key="AppFontFamily">avares://Avalonia.Fonts.Inter#Inter</FontFamily>
+
+  <CornerRadius x:Key="ControlCornerRadius">12</CornerRadius>
+  <CornerRadius x:Key="CardCornerRadius">18</CornerRadius>
+  <Thickness x:Key="ControlPadding">16,12</Thickness>
+  <Thickness x:Key="CardPadding">32</Thickness>
+
+  <LinearGradientBrush x:Key="AppBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#FF0B1120" Offset="0"/>
+    <GradientStop Color="#FF111C33" Offset="0.5"/>
+    <GradientStop Color="#FF172038" Offset="1"/>
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="AccentOverlayBrush" StartPoint="0,0" EndPoint="1,0">
+    <GradientStop Color="#332560F5" Offset="0"/>
+    <GradientStop Color="#331E3A8A" Offset="1"/>
+  </LinearGradientBrush>
+
+  <DropShadowEffect x:Key="SoftShadowEffect" Opacity="0.4" BlurRadius="20" OffsetX="0" OffsetY="8" Color="#66000000"/>
+</ResourceDictionary>
+

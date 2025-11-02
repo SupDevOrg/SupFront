@@ -2,30 +2,94 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="960" d:DesignHeight="600"
         x:Class="Sup.MainWindow"
-        Title="Sup">
-    <!-- Основной Grid для позиционирования -->
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="100">
-        <TextBlock Text="Вход или регистрация" FontSize="28" HorizontalAlignment="Center" Margin="0,0,0,16" Grid.Row="0" />
+        Title="Sup"
+        MinWidth="920"
+        MinHeight="600">
+  <Grid>
+    <Grid Background="{StaticResource AppBackgroundBrush}">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
 
-        <StackPanel Orientation="Vertical" Grid.Row="1" Margin="0,0,0,8">
-            <TextBox x:Name="LoginTextBox" Watermark="Введите логин" Width="270"/>
+      <Border Grid.Column="0"
+              Margin="48,48,24,48"
+              Background="{StaticResource SurfaceAltBrush}"
+              CornerRadius="{StaticResource CardCornerRadius}">
+        <Grid>
+          <Grid.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+              <GradientStop Color="#442560F5" Offset="0"/>
+              <GradientStop Color="#331E3A8A" Offset="0.6"/>
+              <GradientStop Color="#220F172A" Offset="1"/>
+            </LinearGradientBrush>
+          </Grid.Background>
+          <StackPanel Margin="48" Spacing="24">
+            <TextBlock Text="Sup" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+            <StackPanel Spacing="12">
+              <TextBlock Text="Добро пожаловать!" Classes="display" Foreground="White"/>
+              <TextBlock Text="Вставьте текст приветсвия."
+                         Foreground="#FFE0E7FF" FontSize="16"/>
+            </StackPanel>
+            <Border Background="#208491F5" CornerRadius="12" Padding="24" Effect="{StaticResource SoftShadowEffect}">
+              <StackPanel Spacing="12">
+                <TextBlock Text="Вставьте текст" FontWeight="SemiBold" Foreground="White" FontSize="18"/>
+                <TextBlock Text="Вставьте текст, но больше."
+                           Foreground="#FFCBD5F5" FontSize="14"/>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Border Grid.Column="1"
+              Margin="24,48,48,48"
+              Background="{StaticResource SurfaceBrush}"
+              CornerRadius="{StaticResource CardCornerRadius}"
+              Padding="{StaticResource CardPadding}"
+              Effect="{StaticResource SoftShadowEffect}">
+        <StackPanel Spacing="24" Width="360">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Вход в Sup" Classes="title"/>
+            <TextBlock Text="Введите данные аккаунта, чтобы продолжить" Classes="subtle"/>
+          </StackPanel>
+
+          <StackPanel Spacing="16">
+            <StackPanel Spacing="6">
+              <TextBlock Text="Логин" Classes="caption"/>
+              <TextBox x:Name="LoginTextBox" Watermark="Введите логин"/>
+            </StackPanel>
+            <StackPanel Spacing="6">
+              <TextBlock Text="Пароль" Classes="caption"/>
+              <TextBox x:Name="PasswordTextBox" Watermark="Введите пароль" PasswordChar="*"/>
+            </StackPanel>
+          </StackPanel>
+
+          <StackPanel Spacing="12">
+            <Button x:Name="LoginButton" Content="Войти" HorizontalAlignment="Stretch"/>
+            <Button x:Name="RegisterButton" Content="Создать аккаунт" Classes="outlined" HorizontalAlignment="Stretch"/>
+          </StackPanel>
+
+          <Border Background="{StaticResource SurfaceOverlayBrush}" Padding="16" CornerRadius="12">
+            <TextBlock Text="Входя, вы принимаете условия и идете в пизду."
+                       Classes="muted" FontSize="13"/>
+          </Border>
+
+          <TextBlock x:Name="StatusMessage"
+                     HorizontalAlignment="Center"
+                     FontWeight="SemiBold"
+                     Foreground="{StaticResource SecondaryBrush}"
+                     FontSize="15"
+                     TextAlignment="Center"
+                     TextWrapping="Wrap"
+                     Opacity="1"/>
         </StackPanel>
-        <StackPanel Orientation="Vertical" Grid.Row="2" Margin="0,0,0,16">
-            <TextBox x:Name="PasswordTextBox" Watermark="Введите пароль" Width="270" PasswordChar="*"/>
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Grid.Row="3" Spacing="10">
-            <Button x:Name="LoginButton" Content="Войти" Width="100"/>
-            <Button x:Name="RegisterButton" Content="Зарегистрироваться" Width="170"/>
-        </StackPanel>
-        <TextBlock x:Name="StatusMessage" Grid.Row="4"
-                   HorizontalAlignment="Center"
-                   FontWeight="Bold"
-                   FontSize="16"
-                   Foreground="Transparent"
-                   Margin="0,32,0,0"/>
+      </Border>
     </Grid>
-
-    <!-- Окно регистрации (задаётся позже через C#, по умолчанию невидимо) -->
+  </Grid>
 </Window>

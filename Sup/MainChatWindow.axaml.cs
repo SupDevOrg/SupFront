@@ -24,6 +24,11 @@ namespace Sup
         private string _currentSearchQuery = string.Empty;
         private float _smoothVolume = 0; // Сглаженное значение громкости
 
+        // Конструктор без параметров (требуется для XAML runtime loader)
+        public MainChatWindow() : this("user")
+        {
+        }
+
         public MainChatWindow(string username)
         {
             InitializeComponent();
@@ -249,7 +254,7 @@ namespace Sup
             {
                 // Начало проверки голоса
                 StartVoiceTest();
-                TestVoiceButton.Content = "Прекратить проверку";
+                TestVoiceButton.Content = "Остановить";
                 _isVoiceTestActive = true;
             }
             else

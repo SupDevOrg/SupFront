@@ -1,0 +1,32 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Style Selector="TextBox">
+    <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}"/>
+    <Setter Property="FontSize" Value="15"/>
+    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+    <Setter Property="Background" Value="{StaticResource SurfaceAltBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SurfaceOverlayBrush}"/>
+    <Setter Property="BorderThickness" Value="1.5"/>
+    <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+    <Setter Property="Padding" Value="14,10"/>
+    <Setter Property="CaretBrush" Value="{StaticResource PrimaryBrush}"/>
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="BorderBrush" Duration="0:0:0.2"/>
+        <BrushTransition Property="Background" Duration="0:0:0.2"/>
+      </Transitions>
+    </Setter>
+  </Style>
+
+  <Style Selector="TextBox:focus">
+    <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+    <Setter Property="Background" Value="{StaticResource SurfaceOverlayBrush}"/>
+  </Style>
+
+  <Style Selector="TextBox:disabled">
+    <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource OutlineBrush}"/>
+    <Setter Property="Opacity" Value="0.6"/>
+  </Style>
+</Styles>
+
