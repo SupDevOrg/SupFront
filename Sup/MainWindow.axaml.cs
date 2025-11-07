@@ -22,7 +22,6 @@ namespace Sup
         }
 
         // Обработчик для кнопки "Войти"
-        // Обработчик для кнопки "Войти"
         private async void OnLoginClicked(object? sender, RoutedEventArgs e)
         {
             var login = LoginTextBox.Text;
@@ -59,7 +58,7 @@ namespace Sup
 
                     if (authResponse != null && !string.IsNullOrEmpty(authResponse.accessToken))
                     {
-                        // СОХРАНЯЕМ ТОКЕНЫ В КЭШ - ключевой момент!
+                        // СОХРАНЯЕМ ТОКЕНЫ В КЭШ 
                         await TokenManager.SaveTokensAsync(authResponse.accessToken, authResponse.refreshToken);
 
                         StatusMessage.Text = "Успешный вход!";
