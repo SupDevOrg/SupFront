@@ -76,7 +76,7 @@
           </StackPanel>
 
           <Border Background="{StaticResource SurfaceOverlayBrush}" Padding="16" CornerRadius="12">
-            <TextBlock Text="Входя, вы принимаете условия и идете в пизду."
+            <TextBlock Text="Входя, вы принимаете (правила конфеденциальности и еще какая-нибудь муть)."
                        Classes="muted" FontSize="13"/>
           </Border>
 
