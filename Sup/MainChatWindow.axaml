@@ -62,24 +62,24 @@
                 Padding="32"
                 Effect="{StaticResource SoftShadowEffect}">
           <Grid>
-            <Grid x:Name="MainPanels" RowDefinitions="*,Auto">
-              <StackPanel x:Name="ChatPanel" Spacing="20" Grid.Row="0">
-                  <StackPanel Spacing="4">
-                    <TextBlock x:Name="ChatUserName" Text="Имя пользователя" FontSize="22" FontWeight="SemiBold"/>
-                    <TextBlock Text="История ваших сообщений" Classes="muted"/>
-                  </StackPanel>
+            <Grid x:Name="MainPanels" RowDefinitions="Auto,*,Auto">
+              <Grid x:Name="ChatPanel" RowDefinitions="Auto,*,Auto" Grid.Row="0" Grid.RowSpan="3">
+                <StackPanel Spacing="4" Grid.Row="0" Margin="0,0,0,20">
+                  <TextBlock x:Name="ChatUserName" Text="Имя пользователя" FontSize="22" FontWeight="SemiBold"/>
+                  <TextBlock Text="История ваших сообщений" Classes="muted"/>
+                </StackPanel>
 
-                <Border Padding="12" Height="420">
+                <Border Grid.Row="1" Padding="12">
                   <ListBox x:Name="MessagesListBox"/>
                 </Border>
 
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,20,0,0">
                   <TextBox Grid.Column="0" x:Name="MessageTextBox" Watermark="Введите сообщение..." VerticalAlignment="Center"/>
                   <Button Grid.Column="1" x:Name="SendMessageButton" Content="Отправить" MinWidth="100" Margin="12,0,0,0" VerticalAlignment="Center"/>
                 </Grid>
-              </StackPanel>
+              </Grid>
 
-              <Grid x:Name="GlobalSearchPanel" RowDefinitions="Auto,Auto,*,Auto" IsVisible="False">
+              <Grid x:Name="GlobalSearchPanel" RowDefinitions="Auto,Auto,*,Auto" Grid.Row="0" Grid.RowSpan="3" IsVisible="False">
                 <StackPanel Orientation="Horizontal" Spacing="12" Grid.Row="0" Margin="0,0,0,16">
                   <Button x:Name="BackToChatButton" Content="Назад" Classes="outlined" Width="140"/>
                   <TextBlock Text="Глобальный поиск" Classes="title" VerticalAlignment="Center"/>
