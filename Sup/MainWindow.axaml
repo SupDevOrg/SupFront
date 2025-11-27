@@ -43,6 +43,10 @@
                            Foreground="#FFCBD5F5" FontSize="14"/>
               </StackPanel>
             </Border>
+            <Border Background="{StaticResource SurfaceOverlayBrush}" Padding="16" CornerRadius="12">
+            <TextBlock Text="Входя, вы принимаете (правила конфеденциальности и еще какая-нибудь муть)."
+                       Classes="muted" FontSize="13"/>
+            </Border>
           </StackPanel>
         </Grid>
       </Border>
@@ -54,12 +58,14 @@
               Padding="{StaticResource CardPadding}"
               Effect="{StaticResource SoftShadowEffect}">
         <StackPanel Spacing="24" Width="360">
+          <!-- Заголовок с переключением между входом и регистрацией -->
           <StackPanel Spacing="8">
-            <TextBlock Text="Вход в Sup" Classes="title"/>
-            <TextBlock Text="Введите данные аккаунта, чтобы продолжить" Classes="subtle"/>
+            <TextBlock x:Name="TitleText" Text="Вход в Sup" Classes="title"/>
+            <TextBlock x:Name="SubtitleText" Text="Введите данные аккаунта, чтобы продолжить" Classes="subtle"/>
           </StackPanel>
 
-          <StackPanel Spacing="16">
+          <!-- Основные поля для входа и регистрации -->
+          <StackPanel x:Name="MainFields" Spacing="16">
             <StackPanel Spacing="6">
               <TextBlock Text="Логин" Classes="caption"/>
               <TextBox x:Name="LoginTextBox" Watermark="Введите логин"/>
@@ -68,17 +74,42 @@
               <TextBlock Text="Пароль" Classes="caption"/>
               <TextBox x:Name="PasswordTextBox" Watermark="Введите пароль" PasswordChar="*"/>
             </StackPanel>
+            
+            <!-- Поле для email (только в режиме регистрации) -->
+            <StackPanel x:Name="EmailField" Spacing="6" IsVisible="False">
+              <TextBlock Text="Email (опционально)" Classes="caption"/>
+              <TextBox x:Name="EmailTextBox" Watermark="Введите email"/>
+              <TextBlock Text="Можно оставить пустым" Classes="muted" FontSize="11"/>
+            </StackPanel>
           </StackPanel>
 
-          <StackPanel Spacing="12">
+          <!-- Панель для подтверждения email -->
+          <StackPanel x:Name="EmailVerificationPanel" Spacing="16" IsVisible="False">
+            <StackPanel Spacing="6">
+              <TextBlock Text="Код подтверждения" Classes="caption"/>
+              <TextBox x:Name="VerificationCodeTextBox" Watermark="Введите код из email"/>
+            </StackPanel>
+            <TextBlock Text="На ваш email был отправлен код подтверждения" 
+                       Classes="muted" FontSize="13" TextWrapping="Wrap"/>
+          </StackPanel>
+
+          <!-- Кнопки для входа -->
+          <StackPanel x:Name="LoginButtons" Spacing="12">
             <Button x:Name="LoginButton" Content="Войти" HorizontalAlignment="Stretch"/>
-            <Button x:Name="RegisterButton" Content="Создать аккаунт" Classes="outlined" HorizontalAlignment="Stretch"/>
+            <Button x:Name="SwitchToRegisterButton" Content="Создать аккаунт" Classes="outlined" HorizontalAlignment="Stretch"/>
           </StackPanel>
 
-          <Border Background="{StaticResource SurfaceOverlayBrush}" Padding="16" CornerRadius="12">
-            <TextBlock Text="Входя, вы принимаете (правила конфеденциальности и еще какая-нибудь муть)."
-                       Classes="muted" FontSize="13"/>
-          </Border>
+          <!-- Кнопки для регистрации -->
+          <StackPanel x:Name="RegisterButtons" Spacing="12" IsVisible="False">
+            <Button x:Name="RegisterButton" Content="Зарегистрироваться" HorizontalAlignment="Stretch"/>
+            <Button x:Name="SwitchToLoginButton" Content="Назад ко входу" Classes="outlined" HorizontalAlignment="Stretch"/>
+          </StackPanel>
+
+          <!-- Кнопки для подтверждения email -->
+          <StackPanel x:Name="VerifyButtons" Spacing="12" IsVisible="False">
+            <Button x:Name="VerifyEmailButton" Content="Подтвердить email" HorizontalAlignment="Stretch"/>
+            <Button x:Name="ResendCodeButton" Content="Отправить код повторно" Classes="outlined" HorizontalAlignment="Stretch"/>
+          </StackPanel>
 
           <TextBlock x:Name="StatusMessage"
                      HorizontalAlignment="Center"
