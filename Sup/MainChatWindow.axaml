@@ -2,11 +2,69 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Sup"
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="720"
         x:Class="Sup.MainChatWindow"
         Title="Sup"
         MinWidth="1180"
         MinHeight="700">
+        
+  <Window.Resources>
+    <!-- Только простые ресурсы и конвертеры! -->
+    <local:HorizontalAlignmentConverter x:Key="HorizontalAlignmentConverter"/>
+    <local:MessageBackgroundConverter x:Key="MessageBackgroundConverter"/>
+    <local:MessageTextColorConverter x:Key="MessageTextColorConverter"/>
+  </Window.Resources>
+  
+  <Window.Styles>
+    <Style Selector="TextBlock.title">
+      <Setter Property="FontSize" Value="20"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+    </Style>
+    
+    <Style Selector="TextBlock.muted">
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+    </Style>
+    
+    <Style Selector="TextBlock.caption">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+    </Style>
+    
+    <Style Selector="Button">
+      <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
+      <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource TextSecondaryBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="12,8"/>
+      <Setter Property="FontSize" Value="14"/>
+    </Style>
+    
+    <Style Selector="Button:pointerover">
+      <Setter Property="Background" Value="{StaticResource SurfaceAltBrush}"/>
+    </Style>
+    
+    <Style Selector="Button.outlined">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="{StaticResource TextSecondaryBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    
+    <Style Selector="TextBox">
+      <Setter Property="Background" Value="{StaticResource SurfaceAltBrush}"/>
+      <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource TextSecondaryBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="12"/>
+      <Setter Property="FontSize" Value="14"/>
+    </Style>
+  </Window.Styles>
+  
   <Grid>
     <Grid Background="{StaticResource AppBackgroundBrush}">
       <Grid Margin="32" ColumnDefinitions="400,*">
@@ -37,7 +95,48 @@
                     CornerRadius="{StaticResource ControlCornerRadius}"
                     Padding="12"
                     Margin="0,0,0,24">
-              <ListBox x:Name="UsersListBox" MinHeight="360"/>
+              <ListBox x:Name="UsersListBox" 
+                       MinHeight="360"
+                       ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBox.ItemContainerTheme>
+                  <ControlTheme TargetType="ListBoxItem">
+                    <Setter Property="Template">
+                      <ControlTemplate>
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Margin="0,2,0,2"/>
+                      </ControlTemplate>
+                    </Setter>
+                  </ControlTheme>
+                </ListBox.ItemContainerTheme>
+                <ListBox.ItemTemplate>
+                  <DataTemplate DataType="local:ChatListItem">
+                    <Border Background="{StaticResource SurfaceAltBrush}"
+                            CornerRadius="8"
+                            Padding="12"
+                            Margin="0,2"
+                            Cursor="Hand">
+                      <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding DisplayName}"
+                                   FontWeight="SemiBold"
+                                   FontSize="16"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock Text="{Binding LastMessage}"
+                                   TextWrapping="Wrap"
+                                   Opacity="0.8"
+                                   MaxHeight="40"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock Text="{Binding LastMessageTime}"
+                                   FontSize="12"
+                                   Opacity="0.6"
+                                   HorizontalAlignment="Right"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
             </Border>
 
             <Border Grid.Row="2"
@@ -69,13 +168,72 @@
                   <TextBlock Text="История ваших сообщений" Classes="muted"/>
                 </StackPanel>
 
-                <Border Grid.Row="1" Padding="12">
-                  <ListBox x:Name="MessagesListBox"/>
+                <Border Grid.Row="1" 
+                        Padding="12"
+                        Background="{StaticResource SurfaceAltBrush}"
+                        CornerRadius="{StaticResource ControlCornerRadius}">
+                  <ScrollViewer Name="MessagesScrollViewer"
+                                VerticalScrollBarVisibility="Auto"
+                                HorizontalScrollBarVisibility="Disabled">
+                    <ListBox x:Name="MessagesListBox" 
+                             BorderThickness="0"
+                             Background="Transparent">
+                      <ListBox.ItemContainerTheme>
+                        <ControlTheme TargetType="ListBoxItem">
+                          <Setter Property="Template">
+                            <ControlTemplate>
+                              <ContentPresenter Content="{TemplateBinding Content}"
+                                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                Margin="0,2,0,2"/>
+                            </ControlTemplate>
+                          </Setter>
+                        </ControlTheme>
+                      </ListBox.ItemContainerTheme>
+                      <ListBox.ItemTemplate>
+                        <DataTemplate DataType="local:MessageListItem">
+                          <Border HorizontalAlignment="{Binding IsOwnMessage, Converter={StaticResource HorizontalAlignmentConverter}}"
+                                  CornerRadius="12"
+                                  Padding="12"
+                                  Margin="0,4,0,4"
+                                  Background="{Binding IsOwnMessage, Converter={StaticResource MessageBackgroundConverter}}"
+                                  MaxWidth="400">
+                            <StackPanel Spacing="4">
+                              <TextBlock Text="{Binding SenderName}"
+                                         FontWeight="SemiBold"
+                                         FontSize="12"
+                                         Foreground="{Binding IsOwnMessage, Converter={StaticResource MessageTextColorConverter}}"/>
+                              <TextBlock Text="{Binding Content}"
+                                         TextWrapping="Wrap"
+                                         FontSize="14"
+                                         Foreground="{Binding IsOwnMessage, Converter={StaticResource MessageTextColorConverter}}"/>
+                              <TextBlock Text="{Binding Time}"
+                                         FontSize="10"
+                                         Opacity="0.6"
+                                         HorizontalAlignment="Right"
+                                         Foreground="{Binding IsOwnMessage, Converter={StaticResource MessageTextColorConverter}}"/>
+                            </StackPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </ScrollViewer>
                 </Border>
 
                 <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,20,0,0">
-                  <TextBox Grid.Column="0" x:Name="MessageTextBox" Watermark="Введите сообщение..." VerticalAlignment="Center"/>
-                  <Button Grid.Column="1" x:Name="SendMessageButton" Content="Отправить" MinWidth="100" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                  <TextBox Grid.Column="0" 
+                           x:Name="MessageTextBox" 
+                           Watermark="Введите сообщение..." 
+                           VerticalAlignment="Center"
+                           AcceptsReturn="True"
+                           TextWrapping="Wrap"
+                           MinHeight="40"/>
+                  <Button Grid.Column="1" 
+                          x:Name="SendMessageButton" 
+                          Content="Отправить" 
+                          MinWidth="100" 
+                          Margin="12,0,0,0" 
+                          VerticalAlignment="Center"
+                          Height="40"/>
                 </Grid>
               </Grid>
 
@@ -87,11 +245,44 @@
 
                 <TextBox x:Name="SearchGlobalTextBox" Watermark="Введите имя для поиска" Grid.Row="1" Margin="0,0,0,16"/>
 
-                <Border Grid.Row="2" Background="{StaticResource SurfaceAltBrush}" CornerRadius="{StaticResource ControlCornerRadius}" Padding="12" Margin="0,0,0,16">
-                  <ListBox x:Name="GlobalUsersListBox"/>
+                <Border Grid.Row="2" 
+                        Background="{StaticResource SurfaceAltBrush}" 
+                        CornerRadius="{StaticResource ControlCornerRadius}" 
+                        Padding="12" 
+                        Margin="0,0,0,16">
+                  <ListBox x:Name="GlobalUsersListBox"
+                           ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.ItemContainerTheme>
+                      <ControlTheme TargetType="ListBoxItem">
+                        <Setter Property="Template">
+                          <ControlTemplate>
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              Margin="0,2,0,2"/>
+                          </ControlTemplate>
+                        </Setter>
+                      </ControlTheme>
+                    </ListBox.ItemContainerTheme>
+                    <ListBox.ItemTemplate>
+                      <DataTemplate DataType="x:String">
+                        <Border Background="{StaticResource SurfaceAltBrush}"
+                                CornerRadius="8"
+                                Padding="12"
+                                Margin="0,2"
+                                Cursor="Hand">
+                          <TextBlock Text="{Binding}"
+                                     FontSize="16"
+                                     Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </Border>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
                 </Border>
 
-                <Border Grid.Row="3" Background="{StaticResource SurfaceAltBrush}" CornerRadius="{StaticResource ControlCornerRadius}" Padding="16,12">
+                <Border Grid.Row="3" 
+                        Background="{StaticResource SurfaceAltBrush}" 
+                        CornerRadius="{StaticResource ControlCornerRadius}" 
+                        Padding="16,12">
                   <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="16">
                     <Button x:Name="PrevPageButton" Content="← Назад" Classes="outlined" IsEnabled="False" MinWidth="140"/>
                     <TextBlock x:Name="PageInfoText" Text="Страница 1 из 1" VerticalAlignment="Center"/>
@@ -122,9 +313,10 @@
 
         <Border x:Name="VoicePanel"
                 Grid.Column="1"
+                Background="{StaticResource SurfaceBrush}"
                 CornerRadius="{StaticResource CardCornerRadius}"
                 Padding="32"
-                Margin="32"
+                Effect="{StaticResource SoftShadowEffect}"
                 IsVisible="False">
           <StackPanel Spacing="18">
             <TextBlock Text="Аудио" Classes="title"/>

@@ -1,5 +1,6 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Sup"
              x:Class="Sup.App"
              RequestedThemeVariant="Dark">
   <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
@@ -9,6 +10,15 @@
       <ResourceDictionary.MergedDictionaries>
         <ResourceInclude Source="avares://Sup/Style/Theme.axaml"/>
       </ResourceDictionary.MergedDictionaries>
+      <!-- Радиусы, паддинг, эффект -->
+      <CornerRadius x:Key="CardCornerRadius">16</CornerRadius>
+      <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
+      <Thickness x:Key="CardPadding">48,32,48,32</Thickness>
+      <DropShadowEffect x:Key="SoftShadowEffect" OffsetX="0" OffsetY="4" BlurRadius="12" Color="#28000000" />
+      <!-- Конвертеры -->
+      <local:HorizontalAlignmentConverter x:Key="HorizontalAlignmentConverter" />
+      <local:MessageBackgroundConverter x:Key="MessageBackgroundConverter" />
+      <local:MessageTextColorConverter x:Key="MessageTextColorConverter" />
     </ResourceDictionary>
   </Application.Resources>
 
