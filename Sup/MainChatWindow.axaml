@@ -93,8 +93,8 @@
             <Border Grid.Row="1"
                     Background="{StaticResource SurfaceAltBrush}"
                     CornerRadius="{StaticResource ControlCornerRadius}"
-                    Padding="12"
-                    Margin="0,0,0,24">
+                    Padding="12,12,12,20"
+                    Margin="0,20,0,24">
               <ListBox x:Name="UsersListBox" 
                        MinHeight="360"
                        ScrollViewer.VerticalScrollBarVisibility="Auto">
@@ -112,6 +112,8 @@
                 <ListBox.ItemTemplate>
                   <DataTemplate DataType="local:ChatListItem">
                     <Border Background="{StaticResource SurfaceAltBrush}"
+                            BorderBrush="White"
+                            BorderThickness="1"
                             CornerRadius="8"
                             Padding="12"
                             Margin="0,2"

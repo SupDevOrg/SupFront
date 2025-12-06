@@ -49,3 +49,4 @@
   <DropShadowEffect x:Key="SoftShadowEffect" Opacity="0.4" BlurRadius="20" OffsetX="0" OffsetY="8" Color="#66000000"/>
 </ResourceDictionary>
 
+
