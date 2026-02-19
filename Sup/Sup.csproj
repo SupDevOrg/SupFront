@@ -24,4 +24,8 @@
   <ItemGroup>
     <AvaloniaResource Include="Style\**\*.axaml" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Services\" />
+  </ItemGroup>
 </Project>

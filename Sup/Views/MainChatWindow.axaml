@@ -3,8 +3,9 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Sup"
+        xmlns:models="clr-namespace:Sup.Models"
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="720"
-        x:Class="Sup.MainChatWindow"
+        x:Class="Sup.Views.MainChatWindow"
         Title="Sup"
         MinWidth="1180"
         MinHeight="700">
@@ -110,7 +111,7 @@
                   </ControlTheme>
                 </ListBox.ItemContainerTheme>
                 <ListBox.ItemTemplate>
-                  <DataTemplate DataType="local:ChatListItem">
+                  <DataTemplate DataType="models:ChatListItem">
                     <Border Background="{StaticResource SurfaceAltBrush}"
                             BorderBrush="White"
                             BorderThickness="1"
@@ -192,7 +193,7 @@
                         </ControlTheme>
                       </ListBox.ItemContainerTheme>
                       <ListBox.ItemTemplate>
-                        <DataTemplate DataType="local:MessageListItem">
+                        <DataTemplate DataType="models:MessageListItem">
                           <Border HorizontalAlignment="{Binding IsOwnMessage, Converter={StaticResource HorizontalAlignmentConverter}}"
                                   CornerRadius="12"
                                   Padding="12"

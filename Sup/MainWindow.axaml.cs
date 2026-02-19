@@ -8,6 +8,7 @@ using System.Text.Json;
 using Avalonia.Media;
 using System.Text.Json.Serialization;
 using Sup.ForTokens;
+using Sup.Views;
 using System.Threading.Tasks;
 
 namespace Sup
@@ -93,15 +94,21 @@ namespace Sup
                 return;
             }
 
-            // Создаём http клиент
-            using var client = new HttpClient();
             try
             {
+                // Отключаем кнопку входа
+                LoginButton.IsEnabled = false;
+                StatusMessage.Text = "Подключение...";
+                StatusMessage.Foreground = Brushes.Blue;
+
+                // Создаём http клиент
+                using var client = new HttpClient();
                 // URL вашего backend API
                 var url = $"{App.ApiBaseUrl}user/login";
                 // Формируем json-запрос
                 var payload = new { username = login, password = password };
                 var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                
                 var response = await client.PostAsync(url, content);
 
                 if (response.IsSuccessStatusCode)
@@ -115,8 +122,11 @@ namespace Sup
                         // СОХРАНЯЕМ ТОКЕНЫ В КЭШ 
                         await TokenManager.SaveTokensAsync(authResponse.accessToken, authResponse.refreshToken);
 
-                        StatusMessage.Text = "Успешный вход!";
+                        StatusMessage.Text = "Успешный вход, загружаем чаты...";
                         StatusMessage.Foreground = Brushes.Green;
+                        
+                        Console.WriteLine($"[OnLoginClicked] Успешный вход для пользователя: {login}");
+                        
                         var chatWindow = new MainChatWindow(login);
                         chatWindow.Show();
                         this.Close();
@@ -125,6 +135,7 @@ namespace Sup
                     {
                         StatusMessage.Text = "Ошибка: не удалось получить токен";
                         StatusMessage.Foreground = Brushes.Red;
+                        Console.WriteLine("[OnLoginClicked] Не получен accessToken");
                     }
                 }
                 else
@@ -133,12 +144,24 @@ namespace Sup
                     var errorMsg = await response.Content.ReadAsStringAsync();
                     StatusMessage.Text = $"Ошибка: {errorMsg}";
                     StatusMessage.Foreground = Brushes.Red;
+                    Console.WriteLine($"[OnLoginClicked] Ошибка входа: {response.StatusCode} - {errorMsg}");
                 }
+            }
+            catch (HttpRequestException httpEx)
+            {
+                StatusMessage.Text = $"Ошибка соединения: {httpEx.Message}";
+                StatusMessage.Foreground = Brushes.Red;
+                Console.WriteLine($"[OnLoginClicked] Ошибка соединения: {httpEx.Message}");
             }
             catch (Exception ex)
             {
-                StatusMessage.Text = $"Ошибка соединения: {ex.Message}";
+                StatusMessage.Text = $"Ошибка: {ex.Message}";
                 StatusMessage.Foreground = Brushes.Red;
+                Console.WriteLine($"[OnLoginClicked] Неожиданная ошибка: {ex.Message}");
+            }
+            finally
+            {
+                LoginButton.IsEnabled = true;
             }
         }
 
