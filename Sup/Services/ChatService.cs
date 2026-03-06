@@ -401,7 +401,10 @@ namespace Sup.Services
                 var url = $"{_messageServiceBaseUrl}/messages/{chatId}?user_id={_currentUserId}&page={page}&page_size={pageSize}";
                 var response = await _httpClient.GetAsync(url);
                 if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"[ChatService.LoadChatHistoryAsync] Ошибка загрузки истории чата {chatId}: {response.StatusCode}");
                     return result;
+                }
                 var responseContent = await response.Content.ReadAsStringAsync();
                 var messagesResponse = JsonSerializer.Deserialize<MessagesResponse>(responseContent);
                 if (messagesResponse?.Messages != null)
@@ -416,8 +419,120 @@ namespace Sup.Services
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChatService.LoadChatHistoryAsync] Исключение: {ex.Message}");
+            }
             return result;
+        }
+
+        public async Task<MessageDto?> SendMessageAsync(uint chatId, string content)
+        {
+            if (_currentUserId == 0)
+            {
+                Console.WriteLine("[ChatService.SendMessageAsync] currentUserId=0, сообщение не отправлено");
+                return null;
+            }
+
+            if (chatId == 0 || string.IsNullOrWhiteSpace(content))
+                return null;
+
+            var payload = new
+            {
+                chat_id = chatId,
+                sender_id = _currentUserId,
+                content = content
+            };
+
+            var json = JsonSerializer.Serialize(payload);
+
+            // Пробуем несколько вариантов эндпоинтов — на разных сборках backend они различаются.
+            var urls = new[]
+            {
+                $"{_messageServiceBaseUrl}/messages/{chatId}?user_id={_currentUserId}",
+                $"{_messageServiceBaseUrl}/messages/{chatId}",
+                $"{_messageServiceBaseUrl}/messages",
+                $"{_messageServiceBaseUrl}/message",
+                $"{_messageServiceBaseUrl}/send",
+                $"{_messageServiceBaseUrl}/chat/{chatId}/messages",
+                $"{_messageServiceBaseUrl}/chat/{chatId}/message",
+            };
+
+            foreach (var url in urls)
+            {
+                try
+                {
+                    var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
+                    var resp = await _httpClient.PostAsync(url, httpContent);
+                    if (!resp.IsSuccessStatusCode)
+                    {
+                        Console.WriteLine($"[ChatService.SendMessageAsync] POST {url} -> {resp.StatusCode}");
+                        continue;
+                    }
+
+                    var respJson = await resp.Content.ReadAsStringAsync();
+                    if (string.IsNullOrWhiteSpace(respJson))
+                    {
+                        Console.WriteLine($"[ChatService.SendMessageAsync] POST {url} -> OK, но пустой ответ");
+                        return new MessageDto
+                        {
+                            Id = 0,
+                            ChatId = chatId,
+                            SenderId = _currentUserId,
+                            Content = content,
+                            CreatedAt = DateTime.Now
+                        };
+                    }
+
+                    // Вариант 1: сервер вернул MessageDto напрямую
+                    try
+                    {
+                        var msg = JsonSerializer.Deserialize<MessageDto>(respJson);
+                        if (msg != null && !string.IsNullOrWhiteSpace(msg.Content))
+                            return msg;
+                    }
+                    catch { }
+
+                    // Вариант 2: сервер вернул объект-обёртку
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(respJson);
+                        var root = doc.RootElement;
+
+                        if (root.TryGetProperty("message", out var messageElem))
+                        {
+                            var msg = JsonSerializer.Deserialize<MessageDto>(messageElem.GetRawText());
+                            if (msg != null && !string.IsNullOrWhiteSpace(msg.Content))
+                                return msg;
+                        }
+
+                        if (root.TryGetProperty("id", out _))
+                        {
+                            var msg = JsonSerializer.Deserialize<MessageDto>(root.GetRawText());
+                            if (msg != null && !string.IsNullOrWhiteSpace(msg.Content))
+                                return msg;
+                        }
+                    }
+                    catch { }
+
+                    // Если формат ответа неизвестен, хотя бы считаем, что сообщение сохранено.
+                    Console.WriteLine($"[ChatService.SendMessageAsync] POST {url} -> OK (неизвестный формат ответа)");
+                    return new MessageDto
+                    {
+                        Id = 0,
+                        ChatId = chatId,
+                        SenderId = _currentUserId,
+                        Content = content,
+                        CreatedAt = DateTime.Now
+                    };
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ChatService.SendMessageAsync] Исключение при POST {url}: {ex.Message}");
+                }
+            }
+
+            return null;
         }
 
         public async Task<bool> PollForChatListChangesAsync()

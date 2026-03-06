@@ -102,6 +102,7 @@ namespace Sup.Services
                         {
                             OnMessageReceived?.Invoke(this, new WebSocketMessageEventArgs
                             {
+                                Id = msg.Id,
                                 ChatId = msg.ChatId,
                                 SenderUId = msg.SenderId,
                                 Content = msg.Content,

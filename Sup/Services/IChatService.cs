@@ -12,6 +12,7 @@ namespace Sup.Services
         Task<uint?> CreateChatAsync(uint otherUserId);
         Task<uint> GetOtherUserIdForChat(uint chatId);
         Task<List<MessageDto>> LoadChatHistoryAsync(uint chatId, int page = 1, int pageSize = 20);
+        Task<MessageDto?> SendMessageAsync(uint chatId, string content);
         Task<string?> GetUserNameByIdAsync(uint userId);
         Task<uint?> GetUserIdByNameAsync(string name);
         void PreCacheChatInfo(uint chatId, uint otherUserId, string username);

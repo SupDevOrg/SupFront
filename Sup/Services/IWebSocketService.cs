@@ -15,6 +15,7 @@ namespace Sup.Services
 
     public class WebSocketMessageEventArgs : EventArgs
     {
+        public uint Id { get; set; }
         public uint ChatId { get; set; }
         public uint SenderUId { get; set; }
         public string Content { get; set; } = string.Empty;

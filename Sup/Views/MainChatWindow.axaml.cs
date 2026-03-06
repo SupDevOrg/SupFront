@@ -1,17 +1,12 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using NAudio.CoreAudioApi;
-using NAudio.Wave;
-using Sup.ForTokens;
 using Sup.Models;
 using Sup.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Sup.Views
@@ -257,9 +252,12 @@ namespace Sup.Views
 
                 foreach (var msg in sortedMessages)
                 {
-                    string senderName = msg.SenderId == _currentUserId ? "Вы" : $"Пользователь {msg.SenderId}";
+                    string senderName = msg.SenderId == _currentUserId ? $"{_currentUsername}" : $"Пользователь {msg.SenderId}";
                     items.Add(new MessageListItem
                     {
+                        Id = msg.Id,
+                        ChatId = msg.ChatId,
+                        SenderId = msg.SenderId,
                         Content = msg.Content,
                         IsOwnMessage = msg.SenderId == _currentUserId,
                         Time = msg.CreatedAt.ToString("HH:mm"),
@@ -342,8 +340,38 @@ namespace Sup.Views
                 }
 
                 MessageTextBox.Text = string.Empty;
-                await _webSocketService.SendAsync(message);
-                Console.WriteLine("[OnSendMessageClicked] Сообщение отправлено через WebSocket");
+
+                // Пытаемся сохранить сообщение через REST, чтобы оно грузилось после перезапуска
+                var saved = await _chatService.SendMessageAsync(_currentChatId.Value, message);
+                if (saved == null)
+                {
+                    // Фоллбек на WebSocket (если backend не поддерживает REST-эндпоинт сохранения)
+                    await _webSocketService.SendAsync(message);
+
+                    saved = new MessageDto
+                    {
+                        Id = 0,
+                        ChatId = _currentChatId.Value,
+                        SenderId = _currentUserId,
+                        Content = message,
+                        CreatedAt = DateTime.Now
+                    };
+                }
+
+                var messages = (MessagesListBox.ItemsSource as List<MessageListItem> ?? new()).ToList();
+                messages.Add(new MessageListItem
+                {
+                    Id = saved.Id,
+                    ChatId = saved.ChatId,
+                    SenderId = saved.SenderId,
+                    Content = saved.Content,
+                    IsOwnMessage = saved.SenderId == _currentUserId,
+                    Time = saved.CreatedAt.ToString("HH:mm"),
+                    SenderName = $"{_currentUsername}"
+                });
+                MessagesListBox.ItemsSource = messages;
+
+                Console.WriteLine("[OnSendMessageClicked] Сообщение отправлено");
                 ScrollToLatest();
             }
             catch (Exception ex)
@@ -362,12 +390,18 @@ namespace Sup.Views
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 var messages = (MessagesListBox.ItemsSource as List<MessageListItem> ?? new()).ToList();
+                if (e.Id != 0 && messages.Any(m => m.Id == e.Id))
+                    return;
+
                 messages.Add(new MessageListItem
                 {
+                    Id = e.Id,
+                    ChatId = e.ChatId,
+                    SenderId = e.SenderUId,
                     Content = e.Content,
                     IsOwnMessage = e.SenderUId == _currentUserId,
                     Time = e.CreatedAt.ToString("HH:mm"),
-                    SenderName = e.SenderUId == _currentUserId ? "Вы" : $"Пользователь {e.SenderUId}"
+                    SenderName = e.SenderUId == _currentUserId ? $"{_currentUsername}" : $"Пользователь {e.SenderUId}"
                 });
                 MessagesListBox.ItemsSource = messages;
                 ScrollToLatest();
