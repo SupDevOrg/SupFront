@@ -60,6 +60,7 @@ namespace Sup.Views
             UserNameLabel.Text = username;
 
             SetupEventHandlers();
+            ResetTabsState();
             Console.WriteLine($"[MainChatWindow] Инициализация для пользователя: {username}");
             
             // Инициализируем в фоне
@@ -74,8 +75,10 @@ namespace Sup.Views
 
         private void SetupEventHandlers()
         {
-            SearchUsersButton.Click += OnSearchUsersClicked;
+            SearchTabButton.Click += OnSearchTabClicked;
+            FriendsTabButton.Click += OnFriendsTabClicked;
             BackToChatButton.Click += OnBackToChatClicked;
+            BackFromFriendsButton.Click += OnBackFromFriendsClicked;
             SearchGlobalTextBox.KeyUp += async (s, e) => await OnSearchUsersAsync();
             GlobalUsersListBox.DoubleTapped += OnGlobalUserSelected;
             SettingsButton.Click += OnSettingsClicked;
@@ -88,6 +91,53 @@ namespace Sup.Views
             UsersListBox.SelectionChanged += OnChatSelected;
 
             _webSocketService.OnMessageReceived += OnWebSocketMessageReceived;
+        }
+
+        private void ResetTabsState()
+        {
+            SearchTabButton.Classes.Remove("secondary");
+            FriendsTabButton.Classes.Remove("secondary");
+
+            if (!SearchTabButton.Classes.Contains("outlined"))
+                SearchTabButton.Classes.Add("outlined");
+
+            if (!FriendsTabButton.Classes.Contains("outlined"))
+                FriendsTabButton.Classes.Add("outlined");
+        }
+
+        private void SetActiveTab(Button activeButton, Button inactiveButton)
+        {
+            if (!activeButton.Classes.Contains("secondary"))
+                activeButton.Classes.Add("secondary");
+            activeButton.Classes.Remove("outlined");
+
+            inactiveButton.Classes.Remove("secondary");
+            if (!inactiveButton.Classes.Contains("outlined"))
+                inactiveButton.Classes.Add("outlined");
+        }
+
+        private void ShowChatPanel()
+        {
+            ChatPanel.IsVisible = true;
+            GlobalSearchPanel.IsVisible = false;
+            FriendsPanel.IsVisible = false;
+            ResetTabsState();
+        }
+
+        private void ShowSearchPanel()
+        {
+            ChatPanel.IsVisible = false;
+            GlobalSearchPanel.IsVisible = true;
+            FriendsPanel.IsVisible = false;
+            SetActiveTab(SearchTabButton, FriendsTabButton);
+        }
+
+        private void ShowFriendsPanel()
+        {
+            ChatPanel.IsVisible = false;
+            GlobalSearchPanel.IsVisible = false;
+            FriendsPanel.IsVisible = true;
+            SetActiveTab(FriendsTabButton, SearchTabButton);
         }
 
         private async Task InitializeAsync()
@@ -378,15 +428,31 @@ namespace Sup.Views
         private void OnSearchUsersClicked(object? sender, RoutedEventArgs e)
         {
             Console.WriteLine("[OnSearchUsersClicked] Открыта панель поиска");
-            GlobalSearchPanel.IsVisible = true;
-            ChatPanel.IsVisible = false;
+            ShowSearchPanel();
         }
 
         private void OnBackToChatClicked(object? sender, RoutedEventArgs e)
         {
             Console.WriteLine("[OnBackToChatClicked] Возврат к чатам");
-            GlobalSearchPanel.IsVisible = false;
-            ChatPanel.IsVisible = true;
+            ShowChatPanel();
+        }
+
+        private void OnSearchTabClicked(object? sender, RoutedEventArgs e)
+        {
+            Console.WriteLine("[OnSearchTabClicked] Выбрана вкладка поиска");
+            ShowSearchPanel();
+        }
+
+        private void OnFriendsTabClicked(object? sender, RoutedEventArgs e)
+        {
+            Console.WriteLine("[OnFriendsTabClicked] Выбрана вкладка друзей");
+            ShowFriendsPanel();
+        }
+
+        private void OnBackFromFriendsClicked(object? sender, RoutedEventArgs e)
+        {
+            Console.WriteLine("[OnBackFromFriendsClicked] Возврат к чатам из друзей");
+            ShowChatPanel();
         }
 
         private async void OnGlobalUserSelected(object? sender, RoutedEventArgs e)

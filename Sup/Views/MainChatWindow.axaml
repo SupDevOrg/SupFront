@@ -82,11 +82,24 @@
                     Padding="20"
                     Margin="0,0,0,40">
               <StackPanel Spacing="16">
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                  <Button x:Name="SearchTabButton"
+                          Content="Поиск"
+                          Classes="outlined"
+                          Grid.Column="0"
+                          HorizontalAlignment="Stretch"/>
+                  <Button x:Name="FriendsTabButton"
+                          Content="Друзья"
+                          Classes="outlined"
+                          Grid.Column="1"
+                          HorizontalAlignment="Stretch"/>
+                </Grid>
+
                 <StackPanel Spacing="4">
                   <TextBlock Text="Диалоги" Classes="title"/>
-                  <TextBlock Text="Управляйте вашими чатами и открывайте новые" Classes="muted"/>
                 </StackPanel>
-                <Button x:Name="SearchUsersButton" Content="Поиск пользователей" Classes="outlined"/>
+
                 <TextBox x:Name="DialogsSearchTextBox" Watermark="Поиск среди ваших диалогов..."/>
               </StackPanel>
             </Border>
@@ -97,7 +110,7 @@
                     Padding="12,12,12,20"
                     Margin="0,20,0,24">
               <ListBox x:Name="UsersListBox" 
-                       MinHeight="360"
+                       MinHeight="320"
                        ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <ListBox.ItemContainerTheme>
                   <ControlTheme TargetType="ListBoxItem">
@@ -291,6 +304,24 @@
                     <TextBlock x:Name="PageInfoText" Text="Страница 1 из 1" VerticalAlignment="Center"/>
                     <Button x:Name="NextPageButton" Content="Вперед →" IsEnabled="False" MinWidth="140"/>
                   </StackPanel>
+                </Border>
+              </Grid>
+
+              <Grid x:Name="FriendsPanel" RowDefinitions="Auto,*,Auto" Grid.Row="0" Grid.RowSpan="3" IsVisible="False">
+                <StackPanel Orientation="Horizontal" Spacing="12" Grid.Row="0" Margin="0,0,0,16">
+                  <Button x:Name="BackFromFriendsButton" Content="Назад" Classes="outlined" Width="140"/>
+                  <TextBlock Text="Друзья" Classes="title" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <Border Grid.Row="1" 
+                        Background="{StaticResource SurfaceAltBrush}" 
+                        CornerRadius="{StaticResource ControlCornerRadius}" 
+                        Padding="24" 
+                        Margin="0,0,0,16">
+                  <TextBlock Text="Здесь позже появится список ваших друзей."
+                             Classes="muted"
+                             FontSize="14"
+                             TextWrapping="Wrap"/>
                 </Border>
               </Grid>
             </Grid>
