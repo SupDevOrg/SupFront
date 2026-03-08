@@ -308,22 +308,132 @@
               </Grid>
 
               <Grid x:Name="FriendsPanel" RowDefinitions="Auto,*,Auto" Grid.Row="0" Grid.RowSpan="3" IsVisible="False">
-                <StackPanel Orientation="Horizontal" Spacing="12" Grid.Row="0" Margin="0,0,0,16">
-                  <Button x:Name="BackFromFriendsButton" Content="Назад" Classes="outlined" Width="140"/>
-                  <TextBlock Text="Друзья" Classes="title" VerticalAlignment="Center"/>
+                <!-- Верхняя панель с кнопками "Друзья" и "Запросы" -->
+                <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,16">
+                        <Button x:Name="BackFromFriendsButton" Content="Назад" Classes="outlined" Width="140"/>
+                        <TextBlock Text="Друзья и запросы" Classes="title" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button x:Name="FriendsTabButton2" Content="Друзья" Classes="outlined" Grid.Column="0" HorizontalAlignment="Stretch"/>
+                        <Button x:Name="RequestsTabButton" Content="Запросы" Classes="outlined" Grid.Column="1" HorizontalAlignment="Stretch"/>
+                    </Grid>
                 </StackPanel>
 
+                <!-- Вкладка "Друзья" (видима по умолчанию) -->
                 <Border Grid.Row="1" 
+                        x:Name="FriendsTabContent"
                         Background="{StaticResource SurfaceAltBrush}" 
                         CornerRadius="{StaticResource ControlCornerRadius}" 
-                        Padding="24" 
-                        Margin="0,0,0,16">
-                  <TextBlock Text="Здесь позже появится список ваших друзей."
-                             Classes="muted"
-                             FontSize="14"
-                             TextWrapping="Wrap"/>
+                        Padding="20" 
+                        Margin="0,0,0,16"
+                        IsVisible="True">
+                    <ListBox x:Name="FriendsListBox"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             BorderThickness="0"
+                             Background="Transparent">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:ChatListItem">
+                                <Border Background="{StaticResource SurfaceBrush}"
+                                        CornerRadius="8"
+                                        Padding="12"
+                                        Margin="0,2">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <TextBlock Grid.Column="0" 
+                                                   Text="{Binding DisplayName}" 
+                                                   FontSize="14" 
+                                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <!-- Сюда можно добавить кнопку (например, "Написать") позже -->
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </Border>
-              </Grid>
+
+                <!-- Вкладка "Запросы" (скрыта по умолчанию) -->
+                <Border Grid.Row="1" 
+                        x:Name="RequestsTabContent"
+                        Background="{StaticResource SurfaceAltBrush}" 
+                        CornerRadius="{StaticResource ControlCornerRadius}" 
+                        Padding="20"
+                        Margin="0,0,0,16"
+                        IsVisible="False">
+                    <Grid ColumnDefinitions="*,Auto,*">
+                        <!-- Левая колонка: входящие запросы -->
+                        <Grid Grid.Column="0" RowDefinitions="Auto,*">
+                            <TextBlock Text="Входящие запросы" Classes="caption" Margin="0,0,0,8"/>
+                            <ListBox Grid.Row="1" 
+                                     x:Name="IncomingRequestsListBox"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                     BorderThickness="0"
+                                     Background="Transparent">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:ChatListItem">
+                                        <Border Background="{StaticResource SurfaceBrush}"
+                                                CornerRadius="8"
+                                                Padding="12"
+                                                Margin="0,2">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <TextBlock Grid.Column="0" 
+                                                           Text="{Binding DisplayName}" 
+                                                           FontSize="14" 
+                                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                <Button Grid.Column="1" 
+                                                        Content="Принять" 
+                                                        Classes="outlined" 
+                                                        Padding="8,4" 
+                                                        FontSize="12"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+
+                        <!-- Вертикальный разделитель -->
+                        <Border Grid.Column="1" 
+                                Width="1" 
+                                Background="{StaticResource TextSecondaryBrush}" 
+                                Opacity="0.3" 
+                                Margin="20,0"/>
+
+                        <!-- Правая колонка: исходящие запросы -->
+                        <Grid Grid.Column="2" RowDefinitions="Auto,*">
+                            <TextBlock Text="Исходящие запросы" Classes="caption" Margin="0,0,0,8"/>
+                            <ListBox Grid.Row="1" 
+                                     x:Name="OutgoingRequestsListBox"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                     BorderThickness="0"
+                                     Background="Transparent">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:ChatListItem">
+                                        <Border Background="{StaticResource SurfaceBrush}"
+                                                CornerRadius="8"
+                                                Padding="12"
+                                                Margin="0,2">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <TextBlock Grid.Column="0" 
+                                                           Text="{Binding DisplayName}" 
+                                                           FontSize="14" 
+                                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                <Button Grid.Column="1" 
+                                                        Content="Отменить" 
+                                                        Classes="outlined" 
+                                                        Padding="8,4" 
+                                                        FontSize="12"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- Нижняя информационная панель удалена -->
+            </Grid>
             </Grid>
           </Grid>
         </Border>
