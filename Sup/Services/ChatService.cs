@@ -398,26 +398,59 @@ namespace Sup.Services
             var result = new List<MessageDto>();
             try
             {
-                var url = $"{_messageServiceBaseUrl}/messages/{chatId}?user_id={_currentUserId}&page={page}&page_size={pageSize}";
-                var response = await _httpClient.GetAsync(url);
-                if (!response.IsSuccessStatusCode)
+                // На backend'ах часто отличаются query-параметры и индексация страниц (0/1).
+                // Пробуем несколько вариантов, а при 400 логируем тело ответа.
+                var urls = new[]
                 {
-                    Console.WriteLine($"[ChatService.LoadChatHistoryAsync] Ошибка загрузки истории чата {chatId}: {response.StatusCode}");
+                    // текущий вариант (page starts at 1, page_size)
+                    $"{_messageServiceBaseUrl}/messages/{chatId}?user_id={_currentUserId}&page={page}&page_size={pageSize}",
+                    // page starts at 0
+                    $"{_messageServiceBaseUrl}/messages/{chatId}?user_id={_currentUserId}&page={Math.Max(0, page - 1)}&page_size={pageSize}",
+                    // size вместо page_size
+                    $"{_messageServiceBaseUrl}/messages/{chatId}?user_id={_currentUserId}&page={Math.Max(0, page - 1)}&size={pageSize}",
+                    // без user_id (иногда берут из токена)
+                    $"{_messageServiceBaseUrl}/messages/{chatId}?page={Math.Max(0, page - 1)}&size={pageSize}",
+                    $"{_messageServiceBaseUrl}/messages/{chatId}?page={Math.Max(0, page - 1)}&page_size={pageSize}",
+                };
+
+                HttpResponseMessage? lastResp = null;
+                foreach (var url in urls)
+                {
+                    var resp = await _httpClient.GetAsync(url);
+                    lastResp = resp;
+                    if (!resp.IsSuccessStatusCode)
+                    {
+                        if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                        {
+                            var body = await resp.Content.ReadAsStringAsync();
+                            Console.WriteLine($"[ChatService.LoadChatHistoryAsync] 400 для {url}. Body(первые 200): {body.Substring(0, Math.Min(200, body.Length))}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[ChatService.LoadChatHistoryAsync] GET {url} -> {resp.StatusCode}");
+                        }
+                        continue;
+                    }
+
+                    var responseContent = await resp.Content.ReadAsStringAsync();
+                    var messagesResponse = JsonSerializer.Deserialize<MessagesResponse>(responseContent);
+                    if (messagesResponse?.Messages != null)
+                    {
+                        result = messagesResponse.Messages.OrderBy(m => m.CreatedAt).ToList();
+                        // Предварительная загрузка имён
+                        var ids = result.Where(m => m.SenderId != _currentUserId).Select(m => m.SenderId).Distinct();
+                        foreach (var id in ids)
+                        {
+                            if (!_userNameCache.ContainsKey(id))
+                                await GetUserNameByIdAsync(id);
+                        }
+                    }
+
                     return result;
                 }
-                var responseContent = await response.Content.ReadAsStringAsync();
-                var messagesResponse = JsonSerializer.Deserialize<MessagesResponse>(responseContent);
-                if (messagesResponse?.Messages != null)
-                {
-                    result = messagesResponse.Messages.OrderBy(m => m.CreatedAt).ToList();
-                    // Предварительная загрузка имён
-                    var ids = result.Where(m => m.SenderId != _currentUserId).Select(m => m.SenderId).Distinct();
-                    foreach (var id in ids)
-                    {
-                        if (!_userNameCache.ContainsKey(id))
-                            await GetUserNameByIdAsync(id);
-                    }
-                }
+
+                if (lastResp != null)
+                    Console.WriteLine($"[ChatService.LoadChatHistoryAsync] Не удалось загрузить историю чата {chatId}. Последний статус: {lastResp.StatusCode}");
             }
             catch (Exception ex)
             {
