@@ -135,6 +135,34 @@ namespace Sup.Views
             SetActiveTab(FriendsTabButton, SearchTabButton);
         }
 
+        private async Task RemoveEmptyPendingChatIfCurrentAsync()
+        {
+            try
+            {
+                if (_currentChatId.HasValue &&
+                    _pendingChats.TryGetValue(_currentChatId.Value, out _))
+                {
+                    var messages = MessagesListBox.ItemsSource as List<MessageListItem>;
+                    var hasMessages = messages != null && messages.Count > 0;
+                    var hasDraft = !string.IsNullOrWhiteSpace(MessageTextBox.Text);
+
+                    if (!hasMessages && !hasDraft)
+                    {
+                        var removedId = _currentChatId.Value;
+                        _pendingChats.Remove(removedId);
+                        Console.WriteLine($"[RemoveEmptyPendingChatIfCurrentAsync] Удален временный чат без сообщений: {removedId}");
+
+                        var chats = await _chatService.GetUserChatsAsync();
+                        await Dispatcher.UIThread.InvokeAsync(() => UpdateChatsList(chats));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[RemoveEmptyPendingChatIfCurrentAsync] Ошибка: {ex.Message}");
+            }
+        }
+
         private async Task InitializeAsync()
         {
             try
@@ -177,10 +205,6 @@ namespace Sup.Views
             try
             {
                 var validChats = chats.Where(c => c != null && c.Id > 0).ToList();
-                
-                var pendingItems = _pendingChats.Values
-                    .Where(c => c.IsPending)
-                    .ToList();
 
                 var items = validChats.Select(c => new ChatListItem
                 {
@@ -190,17 +214,8 @@ namespace Sup.Views
                     LastMessageTime = c.LastMessageTime.ToString("HH:mm")
                 }).ToList();
 
-                var pendingChatItems = pendingItems.Select(c => new ChatListItem
-                {
-                    ChatId = c.Id,
-                    DisplayName = c.Name,
-                    LastMessage = c.LastMessage,
-                    LastMessageTime = c.LastMessageTime.ToString("HH:mm")
-                }).ToList();
-
-                var allItems = items.Concat(pendingChatItems).ToList();
-                UsersListBox.ItemsSource = allItems;
-                Console.WriteLine($"[UpdateChatsList] Список обновлен: {validChats.Count} реальных чатов + {pendingItems.Count} временных");
+                UsersListBox.ItemsSource = items;
+                Console.WriteLine($"[UpdateChatsList] Список обновлен: {validChats.Count} реальных чатов, временные не отображаются");
             }
             catch (Exception ex)
             {
@@ -210,6 +225,8 @@ namespace Sup.Views
 
         private async void OnChatSelected(object? sender, SelectionChangedEventArgs e)
         {
+            await RemoveEmptyPendingChatIfCurrentAsync();
+
             if (UsersListBox.SelectedItem is ChatListItem selectedChat && selectedChat.ChatId != 0)
             {
                 Console.WriteLine($"[OnChatSelected] Выбран чат: {selectedChat.DisplayName} (ID: {selectedChat.ChatId})");
@@ -473,12 +490,14 @@ namespace Sup.Views
 
         private void OnSearchTabClicked(object? sender, RoutedEventArgs e)
         {
+            _ = RemoveEmptyPendingChatIfCurrentAsync();
             Console.WriteLine("[OnSearchTabClicked] Выбрана вкладка поиска");
             ShowSearchPanel();
         }
 
         private void OnFriendsTabClicked(object? sender, RoutedEventArgs e)
         {
+            _ = RemoveEmptyPendingChatIfCurrentAsync();
             Console.WriteLine("[OnFriendsTabClicked] Выбрана вкладка друзей");
             ShowFriendsPanel();
         }

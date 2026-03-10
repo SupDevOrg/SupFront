@@ -56,7 +56,18 @@ namespace Sup.Services
 
             try
             {
-                var data = Encoding.UTF8.GetBytes(message);
+                // Многие backend'ы ожидают JSON, чтобы уметь сохранять сообщение в историю.
+                // Отправка "голой строки" часто не сохраняется в БД.
+                var payload = new
+                {
+                    chat_id = _currentChatId,
+                    sender_id = _currentUserId,
+                    content = message,
+                    created_at = DateTime.UtcNow
+                };
+
+                var json = JsonSerializer.Serialize(payload);
+                var data = Encoding.UTF8.GetBytes(json);
                 await _ws.SendAsync(new ArraySegment<byte>(data), WebSocketMessageType.Text, true, CancellationToken.None);
                 return true;
             }
