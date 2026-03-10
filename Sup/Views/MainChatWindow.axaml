@@ -280,15 +280,49 @@
                       </ControlTheme>
                     </ListBox.ItemContainerTheme>
                     <ListBox.ItemTemplate>
-                      <DataTemplate DataType="x:String">
+                      <DataTemplate DataType="models:SearchResultItemDto">
                         <Border Background="{StaticResource SurfaceAltBrush}"
                                 CornerRadius="8"
                                 Padding="12"
                                 Margin="0,2"
                                 Cursor="Hand">
-                          <TextBlock Text="{Binding}"
-                                     FontSize="16"
-                                     Foreground="{StaticResource TextPrimaryBrush}"/>
+                          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" VerticalAlignment="Center">
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding Username}"
+                                       FontSize="16"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                              <Button Content="Добавить в друзья"
+                                      Classes="elevated" 
+                                      Padding="8,4" 
+                                      FontSize="12"
+                                      MinWidth="140"
+                                      Tag="{Binding Id}"
+                                      IsVisible="{Binding CanAddFriend}"/>
+                              <Button Content="Принять"
+                                      Classes="elevated" 
+                                      Padding="8,4" 
+                                      FontSize="12"
+                                      MinWidth="140"
+                                      Tag="{Binding Id}"
+                                      IsVisible="{Binding HasIncomingRequest}"/>
+                              <Button Content="Отклонить"
+                                      Classes="outlined" 
+                                      Padding="8,4" 
+                                      FontSize="12"
+                                      MinWidth="140"
+                                      Tag="{Binding Id}"
+                                      IsVisible="{Binding HasIncomingRequest}"/>
+                              <Button Content="Отменить запрос"
+                                      Classes="outlined" 
+                                      Padding="8,4" 
+                                      FontSize="12"
+                                      MinWidth="140"
+                                      Tag="{Binding Id}"
+                                      IsVisible="{Binding HasOutgoingRequest}"/>
+                            </StackPanel>
+                          </Grid>
                         </Border>
                       </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -333,19 +367,24 @@
                              BorderThickness="0"
                              Background="Transparent">
                         <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="models:ChatListItem">
+                            <DataTemplate x:DataType="models:FriendListItemDto">
                                 <Border Background="{StaticResource SurfaceBrush}"
                                         CornerRadius="8"
                                         Padding="12"
-                                        Margin="0,2">
-                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                        <TextBlock Grid.Column="0" 
-                                                   Text="{Binding DisplayName}" 
-                                                   FontSize="14" 
-                                                   Foreground="{StaticResource TextPrimaryBrush}"
-                                                   VerticalAlignment="Center"/>
-                                        <!-- Сюда можно добавить кнопку (например, "Написать") позже -->
-                                    </Grid>
+                                        Margin="0,2"
+                                        Cursor="Hand"
+                                        x:Name="FriendBorder">
+                                    <Border.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem x:Name="RemoveFriendMenuItem"
+                                                      Header="Удалить из друзей" 
+                                                      Foreground="#D84040"
+                                                      Tag="{Binding Id}"/>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
+                                    <TextBlock Text="{Binding Username}" 
+                                               FontSize="14" 
+                                               Foreground="{StaticResource TextPrimaryBrush}"/>
                                 </Border>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -370,21 +409,31 @@
                                      BorderThickness="0"
                                      Background="Transparent">
                                 <ListBox.ItemTemplate>
-                                    <DataTemplate x:DataType="models:ChatListItem">
+                                    <DataTemplate x:DataType="models:FriendListItemDto">
                                         <Border Background="{StaticResource SurfaceBrush}"
                                                 CornerRadius="8"
                                                 Padding="12"
                                                 Margin="0,2">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                                                 <TextBlock Grid.Column="0" 
-                                                           Text="{Binding DisplayName}" 
+                                                           Text="{Binding Username}" 
                                                            FontSize="14" 
-                                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                                           VerticalAlignment="Center"/>
                                                 <Button Grid.Column="1" 
+                                                        x:Name="AcceptIncomingButton"
                                                         Content="Принять" 
+                                                        Classes="elevated" 
+                                                        Padding="8,4" 
+                                                        FontSize="12"
+                                                        Tag="{Binding Id}"/>
+                                                <Button Grid.Column="2" 
+                                                        x:Name="RejectIncomingButton"
+                                                        Content="Отклонить" 
                                                         Classes="outlined" 
                                                         Padding="8,4" 
-                                                        FontSize="12"/>
+                                                        FontSize="12"
+                                                        Tag="{Binding Id}"/>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -408,21 +457,24 @@
                                      BorderThickness="0"
                                      Background="Transparent">
                                 <ListBox.ItemTemplate>
-                                    <DataTemplate x:DataType="models:ChatListItem">
+                                    <DataTemplate x:DataType="models:FriendListItemDto">
                                         <Border Background="{StaticResource SurfaceBrush}"
                                                 CornerRadius="8"
                                                 Padding="12"
                                                 Margin="0,2">
                                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                                 <TextBlock Grid.Column="0" 
-                                                           Text="{Binding DisplayName}" 
+                                                           Text="{Binding Username}" 
                                                            FontSize="14" 
-                                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                                           VerticalAlignment="Center"/>
                                                 <Button Grid.Column="1" 
-                                                        Content="Отменить" 
+                                                        x:Name="CancelOutgoingButton"
+                                                        Content="Отменить запрос" 
                                                         Classes="outlined" 
                                                         Padding="8,4" 
-                                                        FontSize="12"/>
+                                                        FontSize="12"
+                                                        Tag="{Binding Id}"/>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>

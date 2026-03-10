@@ -31,6 +31,22 @@ namespace Sup.Services
             return await JsonSerializer.DeserializeAsync<SearchUsersResponse>(stream);
         }
 
+        public async Task<UserDto?> GetUserByIdAsync(uint userId)
+        {
+            try
+            {
+                var url = $"{App.ApiBaseUrl}user/id/{userId}";
+                var response = await _httpClient.GetAsync(url);
+                if (!response.IsSuccessStatusCode) return null;
+                using var stream = await response.Content.ReadAsStreamAsync();
+                return await JsonSerializer.DeserializeAsync<UserDto>(stream);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         public async Task<uint?> GetUserIdByNameAsync(string username)
         {
             try

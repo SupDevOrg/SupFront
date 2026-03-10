@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using NAudio.CoreAudioApi;
@@ -17,6 +18,7 @@ namespace Sup.Views
         private readonly IUserSearchService _userSearchService;
         private readonly IVoiceTestService _voiceTestService;
         private readonly IWebSocketService _webSocketService;
+        private readonly IFriendService _friendService;
 
         private uint _currentUserId = 0;
         private uint? _currentChatId = null;
@@ -30,6 +32,7 @@ namespace Sup.Views
         private System.Timers.Timer? _chatListTimer;
         private Dictionary<uint, ChatDto> _pendingChats = new Dictionary<uint, ChatDto>();
         private bool _isVoiceTestActive = false;
+        private List<SearchResultItemDto> _currentSearchResults = new();
 
         public MainChatWindow() : this("user")
         {
@@ -45,6 +48,7 @@ namespace Sup.Views
                 _userSearchService = new UserSearchService();
                 _voiceTestService = new VoiceTestService();
                 _webSocketService = new WebSocketService();
+                _friendService = new FriendService();
             }
             catch (Exception ex)
             {
@@ -55,6 +59,7 @@ namespace Sup.Views
             UserNameLabel.Text = username;
 
             SetupEventHandlers();
+            SetupGlobalButtonHandlers();
             ResetTabsState();
             Console.WriteLine($"[MainChatWindow] Инициализация для пользователя: {username}");
             
@@ -85,7 +90,170 @@ namespace Sup.Views
             SendMessageButton.Click += OnSendMessageClicked;
             UsersListBox.SelectionChanged += OnChatSelected;
 
+            FriendsTabButton2.Click += OnFriendsTabButton2Clicked;
+            RequestsTabButton.Click += OnRequestsTabButtonClicked;
+
             _webSocketService.OnMessageReceived += OnWebSocketMessageReceived;
+        }
+
+        private void SetupGlobalButtonHandlers()
+        {
+            Console.WriteLine("[SetupGlobalButtonHandlers] Инициализация обработчиков кнопок");
+            Button.ClickEvent.AddClassHandler<Button>(OnAnyButtonClicked, handledEventsToo: true);
+            MenuItem.ClickEvent.AddClassHandler<MenuItem>(OnAnyMenuItemClicked, handledEventsToo: true);
+        }
+
+        private async void OnAnyButtonClicked(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            if (button.Tag is not uint userId) return;
+
+            var content = button.Content?.ToString() ?? "";
+
+            // Обработка кнопок поиска
+            if (GlobalSearchPanel.IsVisible)
+            {
+                Console.WriteLine($"[OnAnyButtonClicked] Кнопка поиска: {content}, ID: {userId}");
+                await OnSearchResultButtonClicked(content, userId);
+                e.Handled = true;
+                return;
+            }
+
+            // Обработка кнопок в списках запросов
+            if (button.Name == "AcceptIncomingButton")
+            {
+                Console.WriteLine($"[OnAnyButtonClicked] Принятие входящего запроса от {userId}");
+                await OnAcceptRequestClicked(userId);
+                e.Handled = true;
+            }
+            else if (button.Name == "RejectIncomingButton")
+            {
+                Console.WriteLine($"[OnAnyButtonClicked] Отклонение входящего запроса от {userId}");
+                await OnRejectRequestClicked(userId);
+                e.Handled = true;
+            }
+            else if (button.Name == "CancelOutgoingButton")
+            {
+                Console.WriteLine($"[OnAnyButtonClicked] Отмена исходящего запроса для {userId}");
+                await OnCancelRequestClicked(userId);
+                e.Handled = true;
+            }
+        }
+
+        private async void OnAnyMenuItemClicked(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem menuItem) return;
+
+            var headerText = menuItem.Header?.ToString() ?? "";
+            
+            // Проверяем что это пункт меню "Удалить из друзей"
+            if (headerText != "Удалить из друзей") return;
+
+            if (menuItem.Tag is not uint friendId)
+            {
+                Console.WriteLine("[OnAnyMenuItemClicked] Tag не содержит friendId");
+                return;
+            }
+
+            Console.WriteLine($"[OnAnyMenuItemClicked] Контекстное меню: {headerText}, FriendID: {friendId}");
+            await OnRemoveFriendClicked(friendId);
+            e.Handled = true;
+        }
+
+        private async Task OnSearchResultButtonClicked(string buttonContent, uint userId)
+        {
+            Console.WriteLine($"[OnSearchResultButtonClicked] Action: {buttonContent}, UserID: {userId}");
+            
+            switch (buttonContent)
+            {
+                case "Добавить в друзья":
+                    await OnAddFriendClicked(userId);
+                    break;
+                case "Принять":
+                    await OnAcceptRequestClicked(userId);
+                    break;
+                case "Отклонить":
+                    await OnRejectRequestClicked(userId);
+                    break;
+                case "Отменить запрос":
+                    await OnCancelRequestClicked(userId);
+                    break;
+            }
+        }
+
+        private async Task OnAddFriendClicked(uint targetUserId)
+        {
+            Console.WriteLine($"[OnAddFriendClicked] Добавление в друзья пользователя {targetUserId}");
+            
+            bool success = await _friendService.SendFriendRequestAsync(_currentUserId, targetUserId);
+            if (success)
+            {
+                Console.WriteLine($"[OnAddFriendClicked] Запрос успешно отправлен");
+                if (GlobalSearchPanel.IsVisible)
+                    await UpdateSearchResultUserStatusAsync(targetUserId);
+            }
+            else
+            {
+                Console.WriteLine($"[OnAddFriendClicked] Ошибка при отправлении запроса");
+            }
+        }
+
+        private async Task OnAcceptRequestClicked(uint friendId)
+        {
+            Console.WriteLine($"[OnAcceptRequestClicked] Принятие запроса от {friendId}");
+            
+            bool success = await _friendService.AcceptFriendRequestAsync(_currentUserId, friendId);
+            if (success)
+            {
+                Console.WriteLine($"[OnAcceptRequestClicked] Запрос принят");
+                if (GlobalSearchPanel.IsVisible)
+                    await UpdateSearchResultUserStatusAsync(friendId);
+                else
+                    await LoadFriendRequestsAsync();
+            }
+            else
+            {
+                Console.WriteLine($"[OnAcceptRequestClicked] Ошибка при принятии запроса");
+            }
+        }
+
+        private async Task OnRejectRequestClicked(uint friendId)
+        {
+            Console.WriteLine($"[OnRejectRequestClicked] Отклонение запроса от {friendId}");
+            
+            bool success = await _friendService.RejectFriendRequestAsync(_currentUserId, friendId);
+            if (success)
+            {
+                Console.WriteLine($"[OnRejectRequestClicked] Запрос отклонен");
+                if (GlobalSearchPanel.IsVisible)
+                    await UpdateSearchResultUserStatusAsync(friendId);
+                else
+                    await LoadFriendRequestsAsync();
+            }
+            else
+            {
+                Console.WriteLine($"[OnRejectRequestClicked] Ошибка при отклонении запроса");
+            }
+        }
+
+        private async Task OnCancelRequestClicked(uint targetUserId)
+        {
+            Console.WriteLine($"[OnCancelRequestClicked] Отмена исходящего запроса для пользователя {targetUserId}");
+            
+            bool success = await _friendService.CancelFriendRequestAsync(_currentUserId, targetUserId);
+            if (success)
+            {
+                Console.WriteLine($"[OnCancelRequestClicked] Запрос отменен");
+                if (GlobalSearchPanel.IsVisible)
+                    await UpdateSearchResultUserStatusAsync(targetUserId);
+                else
+                    await LoadFriendRequestsAsync();
+            }
+            else
+            {
+                Console.WriteLine($"[OnCancelRequestClicked] Ошибка при отмене запроса");
+            }
         }
 
         private void ResetTabsState()
@@ -124,6 +292,10 @@ namespace Sup.Views
             ChatPanel.IsVisible = false;
             GlobalSearchPanel.IsVisible = true;
             FriendsPanel.IsVisible = false;
+            SearchGlobalTextBox.Text = string.Empty;
+            GlobalUsersListBox.ItemsSource = new List<SearchResultItemDto>();
+            ResetPagination();
+            _currentSearchQuery = string.Empty;
             SetActiveTab(SearchTabButton, FriendsTabButton);
         }
 
@@ -414,7 +586,7 @@ namespace Sup.Views
             if (string.IsNullOrWhiteSpace(query))
             {
                 Console.WriteLine("[PerformSearchAsync] Запрос пуст");
-                GlobalUsersListBox.ItemsSource = new List<string>();
+                GlobalUsersListBox.ItemsSource = new List<SearchResultItemDto>();
                 ResetPagination();
                 return;
             }
@@ -430,23 +602,68 @@ namespace Sup.Views
                 {
                     _totalPages = response.TotalPages;
                     UpdatePaginationInfo();
-                    var usernames = response.Users?.Select(u => u.Username).ToList() ?? new();
-                    GlobalUsersListBox.ItemsSource = usernames;
-                    Console.WriteLine($"[PerformSearchAsync] Найдено {usernames.Count} пользователей on page {page + 1}/{_totalPages}");
+                    
+                    var searchResults = new List<SearchResultItemDto>();
+                    foreach (var user in response.Users ?? new())
+                    {
+                        var status = await _friendService.CheckFriendshipStatusAsync(_currentUserId, (uint)user.Id);
+                        var result = new SearchResultItemDto
+                        {
+                            Id = (uint)user.Id,
+                            Username = user.Username,
+                            IsFriend = status?.Status == "ACCEPTED",
+                            HasIncomingRequest = status?.Status == "PENDING" && !status.IsOutgoingRequest,
+                            HasOutgoingRequest = status?.Status == "PENDING" && status.IsOutgoingRequest
+                        };
+                        searchResults.Add(result);
+                    }
+                    
+                    _currentSearchResults = searchResults;
+                    GlobalUsersListBox.ItemsSource = searchResults;
+                    Console.WriteLine($"[PerformSearchAsync] Найдено {searchResults.Count} пользователей на странице {page + 1}/{_totalPages}");
+                    
+                    AttachSearchResultButtonHandlers();
                 }
                 else
                 {
                     Console.WriteLine("[PerformSearchAsync] Ошибка запроса");
                     ResetPagination();
-                    GlobalUsersListBox.ItemsSource = new List<string>();
+                    GlobalUsersListBox.ItemsSource = new List<SearchResultItemDto>();
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[PerformSearchAsync] Ошибка: {ex.Message}");
-                GlobalUsersListBox.ItemsSource = new List<string> { "Ошибка сети" };
+                GlobalUsersListBox.ItemsSource = new List<SearchResultItemDto>();
                 ResetPagination();
             }
+        }
+
+        private async Task UpdateSearchResultUserStatusAsync(uint userId)
+        {
+            Console.WriteLine($"[UpdateSearchResultUserStatusAsync] Обновляем статус пользователя {userId}");
+            
+            // Ищем пользователя в текущих результатах
+            var userResult = _currentSearchResults?.FirstOrDefault(u => u.Id == userId);
+            if (userResult == null)
+            {
+                Console.WriteLine($"[UpdateSearchResultUserStatusAsync] Пользователь {userId} не найден в результатах");
+                return;
+            }
+
+            // Получаем свежий статус с сервера
+            var status = await _friendService.CheckFriendshipStatusAsync(_currentUserId, userId);
+            
+            // Обновляем свойства на основе нового статуса
+            userResult.IsFriend = status?.Status == "ACCEPTED";
+            userResult.HasIncomingRequest = status?.Status == "PENDING" && !status.IsOutgoingRequest;
+            userResult.HasOutgoingRequest = status?.Status == "PENDING" && status.IsOutgoingRequest;
+            
+            Console.WriteLine($"[UpdateSearchResultUserStatusAsync] Статус обновлен: IsFriend={userResult.IsFriend}, HasIncoming={userResult.HasIncomingRequest}, HasOutgoing={userResult.HasOutgoingRequest}");
+            
+            // Обновляем список в UI
+            GlobalUsersListBox.ItemsSource = new List<SearchResultItemDto>(_currentSearchResults);
+            AttachSearchResultButtonHandlers();
         }
 
         private async Task OnSearchUsersAsync()
@@ -477,10 +694,24 @@ namespace Sup.Views
             ShowSearchPanel();
         }
 
-        private void OnFriendsTabClicked(object? sender, RoutedEventArgs e)
+        private async void OnFriendsTabClicked(object? sender, RoutedEventArgs e)
         {
             Console.WriteLine("[OnFriendsTabClicked] Выбрана вкладка друзей");
             ShowFriendsPanel();
+            
+            FriendsTabContent.IsVisible = true;
+            RequestsTabContent.IsVisible = false;
+            
+            if (FriendsTabButton2.Classes.Contains("outlined"))
+                FriendsTabButton2.Classes.Remove("outlined");
+            if (!FriendsTabButton2.Classes.Contains("secondary"))
+                FriendsTabButton2.Classes.Add("secondary");
+
+            if (!RequestsTabButton.Classes.Contains("outlined"))
+                RequestsTabButton.Classes.Add("outlined");
+            RequestsTabButton.Classes.Remove("secondary");
+
+            await LoadFriendsAsync();
         }
 
         private void OnBackFromFriendsClicked(object? sender, RoutedEventArgs e)
@@ -491,33 +722,24 @@ namespace Sup.Views
 
         private async void OnGlobalUserSelected(object? sender, RoutedEventArgs e)
         {
-            if (GlobalUsersListBox.SelectedItem is string userName)
+            if (GlobalUsersListBox.SelectedItem is SearchResultItemDto item)
             {
-                Console.WriteLine($"[OnGlobalUserSelected] Выбран пользователь: {userName}");
-
-                var userId = await _userSearchService.GetUserIdByNameAsync(userName);
-                if (!userId.HasValue)
-                {
-                    Console.WriteLine($"[OnGlobalUserSelected] Не найден ID для {userName}");
-                    return;
-                }
-
-                Console.WriteLine($"[OnGlobalUserSelected] Найден ID: {userId}");
+                Console.WriteLine($"[OnGlobalUserSelected] Выбран пользователь: {item.Username}");
 
                 GlobalSearchPanel.IsVisible = false;
                 ChatPanel.IsVisible = true;
 
-                _currentChatUserName = userName;
-                ChatUserName.Text = userName;
+                _currentChatUserName = item.Username;
+                ChatUserName.Text = item.Username;
                 
                 var tempChatId = (uint)(Guid.NewGuid().GetHashCode() & 0x7FFFFFFF);
                 var pendingChat = new ChatDto
                 {
                     Id = tempChatId,
-                    Name = userName,
+                    Name = item.Username,
                     LastMessage = "Начните общение",
                     LastMessageTime = DateTime.Now,
-                    OtherUserId = userId.Value,
+                    OtherUserId = item.Id,
                     IsPending = true
                 };
 
@@ -666,6 +888,414 @@ namespace Sup.Views
             catch (Exception ex)
             {
                 Console.WriteLine($"[OnChatListPollingAsync] Ошибка: {ex.Message}");
+            }
+        }
+
+        private async void OnFriendsTabButton2Clicked(object? sender, RoutedEventArgs e)
+        {
+            Console.WriteLine("[OnFriendsTabButton2Clicked] Выбрана вкладка друзей");
+            FriendsTabContent.IsVisible = true;
+            RequestsTabContent.IsVisible = false;
+            
+            if (FriendsTabButton2.Classes.Contains("outlined"))
+                FriendsTabButton2.Classes.Remove("outlined");
+            if (!FriendsTabButton2.Classes.Contains("secondary"))
+                FriendsTabButton2.Classes.Add("secondary");
+
+            if (!RequestsTabButton.Classes.Contains("outlined"))
+                RequestsTabButton.Classes.Add("outlined");
+            RequestsTabButton.Classes.Remove("secondary");
+
+            await LoadFriendsAsync();
+        }
+
+        private async void OnRequestsTabButtonClicked(object? sender, RoutedEventArgs e)
+        {
+            Console.WriteLine("[OnRequestsTabButtonClicked] Выбрана вкладка запросов");
+            FriendsTabContent.IsVisible = false;
+            RequestsTabContent.IsVisible = true;
+
+            if (!FriendsTabButton2.Classes.Contains("outlined"))
+                FriendsTabButton2.Classes.Add("outlined");
+            FriendsTabButton2.Classes.Remove("secondary");
+
+            if (RequestsTabButton.Classes.Contains("outlined"))
+                RequestsTabButton.Classes.Remove("outlined");
+            if (!RequestsTabButton.Classes.Contains("secondary"))
+                RequestsTabButton.Classes.Add("secondary");
+
+            await LoadFriendRequestsAsync();
+        }
+
+        private async Task LoadFriendsAsync()
+        {
+            Console.WriteLine($"[LoadFriendsAsync] Загрузка списка друзей для пользователя {_currentUserId}");
+            var friends = await _friendService.GetFriendsAsync(_currentUserId);
+            
+            if (friends != null && friends.Count > 0)
+            {
+                var friendItems = friends.Select(f => new FriendListItemDto 
+                { 
+                    Id = (uint)f.Id, 
+                    Username = f.Username 
+                }).ToList();
+                
+                FriendsListBox.ItemsSource = friendItems;
+                Console.WriteLine($"[LoadFriendsAsync] Загружено {friendItems.Count} друзей");
+                
+                AttachFriendsListHandlers();
+            }
+            else
+            {
+                FriendsListBox.ItemsSource = new List<FriendListItemDto>();
+                Console.WriteLine("[LoadFriendsAsync] Список друзей пуст");
+            }
+        }
+
+        private async Task LoadFriendRequestsAsync()
+        {
+            Console.WriteLine($"[LoadFriendRequestsAsync] Загрузка входящих и исходящих запросов для пользователя {_currentUserId}");
+            
+            var incoming = await _friendService.GetIncomingFriendRequestsAsync(_currentUserId);
+            var outgoing = await _friendService.GetOutgoingFriendRequestsAsync(_currentUserId);
+
+            var incomingItems = incoming?.Select(f => new FriendListItemDto 
+            { 
+                Id = (uint)f.Id, 
+                Username = f.Username 
+            }).ToList() ?? new();
+            
+            var outgoingItems = outgoing?.Select(f => new FriendListItemDto 
+            { 
+                Id = (uint)f.Id, 
+                Username = f.Username 
+            }).ToList() ?? new();
+
+            IncomingRequestsListBox.ItemsSource = incomingItems;
+            OutgoingRequestsListBox.ItemsSource = outgoingItems;
+            
+            Console.WriteLine($"[LoadFriendRequestsAsync] Входящих: {incomingItems.Count}, Исходящих: {outgoingItems.Count}");
+            
+            AttachRequestsListHandlers();
+        }
+
+        private void AttachFriendsListHandlers()
+        {
+            Console.WriteLine("[AttachFriendsListHandlers] Прикрепление обработчиков для списка друзей");
+            
+            // Обработчик для ЛКМ на друзьях
+            Border.PointerPressedEvent.AddClassHandler<Border>(OnFriendBorderPointerPressed, handledEventsToo: true);
+            
+            // Обработчик для контекстного меню (ПКМ)
+            MenuItem.ClickEvent.AddClassHandler<MenuItem>(OnFriendContextMenuItemClicked, handledEventsToo: true);
+        }
+
+        private async void OnFriendContextMenuItemClicked(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem menuItem) return;
+
+            var headerText = menuItem.Header?.ToString() ?? "";
+            
+            // Проверяем что это пункт меню "Удалить из друзей"
+            if (headerText != "Удалить из друзей") return;
+            
+            // Получаем DataContext из родительского элемента (Border)
+            if (menuItem.Parent is ContextMenu contextMenu && contextMenu.PlacementTarget is Border border)
+            {
+                if (border.DataContext is FriendListItemDto friend)
+                {
+                    Console.WriteLine($"[OnFriendContextMenuItemClicked] Удаление друга {friend.Username} (ID: {friend.Id})");
+                    await OnRemoveFriendClicked(friend.Id);
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private async void OnFriendBorderPointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (sender is not Border border) return;
+            
+            if (border.DataContext is not FriendListItemDto friend) return;
+
+            // Проверяем это Border из списка друзей (имеет имя FriendBorder)
+            if (border.Name != "FriendBorder") return;
+
+            var point = e.GetCurrentPoint(border);
+            
+            // Проверяем тип клика
+            if (point.Properties.IsLeftButtonPressed)
+            {
+                // ЛКМ - открыть чат
+                Console.WriteLine($"[OnFriendBorderPointerPressed] ЛКМ на друге: {friend.Username} (ID: {friend.Id})");
+                
+                // Сохраняем имя чата
+                _currentChatUserName = friend.Username;
+                ChatUserName.Text = friend.Username;
+
+                // Проверяем есть ли уже чат с этим пользователем
+                var existingChat = _pendingChats.Values.FirstOrDefault(c => c.OtherUserId == friend.Id && c.IsPending);
+                
+                if (existingChat != null)
+                {
+                    // Временный чат уже есть
+                    Console.WriteLine($"[OnFriendBorderPointerPressed] Найден существующий временный чат с {friend.Username}");
+                    _currentChatId = existingChat.Id;
+                }
+                else
+                {
+                    // Ищем реальный чат на сервере
+                    var chats = await _chatService.GetUserChatsAsync();
+                    var realChat = chats?.FirstOrDefault(c => c.OtherUserId == friend.Id);
+                    
+                    if (realChat != null)
+                    {
+                        // Чат существует на сервере
+                        Console.WriteLine($"[OnFriendBorderPointerPressed] Найден существующий чат на сервере с {friend.Username}. ID: {realChat.Id}");
+                        _currentChatId = realChat.Id;
+                    }
+                    else
+                    {
+                        // Создаем новый временный чат
+                        var tempChatId = (uint)(Guid.NewGuid().GetHashCode() & 0x7FFFFFFF);
+                        var pendingChat = new ChatDto
+                        {
+                            Id = tempChatId,
+                            Name = friend.Username,
+                            LastMessage = "Начните общение",
+                            LastMessageTime = DateTime.Now,
+                            OtherUserId = friend.Id,
+                            IsPending = true
+                        };
+                        
+                        _pendingChats[tempChatId] = pendingChat;
+                        _currentChatId = pendingChat.Id;
+                        Console.WriteLine($"[OnFriendBorderPointerPressed] Создан новый временный чат. ID: {tempChatId}");
+                    }
+                }
+
+                // Переключаемся на панель чатов
+                ChatPanel.IsVisible = true;
+                GlobalSearchPanel.IsVisible = false;
+                FriendsPanel.IsVisible = false;
+
+                // Загружаем сообщения для текущего чата (если это реальный чат)
+                if (!_pendingChats.ContainsKey(_currentChatId.Value))
+                {
+                    var messages = await _chatService.LoadChatHistoryAsync(_currentChatId.Value);
+                    await UpdateMessagesListAsync(messages);
+                    
+                    var otherUserId = await _chatService.GetOtherUserIdForChat(_currentChatId.Value);
+                    if (otherUserId > 0)
+                    {
+                        Console.WriteLine($"[OnFriendBorderPointerPressed] Открываем WebSocket для чата {_currentChatId}");
+                        await _webSocketService.OpenAsync(_currentChatId.Value, _currentUserId, otherUserId);
+                    }
+                }
+                else
+                {
+                    // Это временный чат - очищаем сообщения
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        MessagesListBox.ItemsSource = new List<MessageListItem>();
+                    });
+                }
+
+                e.Handled = true;
+            }
+            else if (point.Properties.IsRightButtonPressed)
+            {
+                // ПКМ - удалить друга (вызываем напрямую, контекстное меню показывается после)
+                Console.WriteLine($"[OnFriendBorderPointerPressed] ПКМ на друге: {friend.Username} (ID: {friend.Id}), ожидаем выбор в контекстном меню");
+                // Не блокируем событие - пусть контекстное меню показывается
+                // Обработчик для выбора пункта меню будет добавлен через AttachFriendsListHandlers
+            }
+        }
+
+        private void AttachRequestsListHandlers()
+        {
+            Console.WriteLine("[AttachRequestsListHandlers] Прикрепление обработчиков для списка запросов");
+        }
+
+        private async void OnFriendSelected(object? sender, RoutedEventArgs e)
+        {
+            if (FriendsListBox.SelectedItem is FriendListItemDto friend)
+            {
+                Console.WriteLine($"[OnFriendSelected] Двойной клик на друга: {friend.Username}");
+                
+                FriendsPanel.IsVisible = false;
+                ChatPanel.IsVisible = true;
+
+                _currentChatUserName = friend.Username;
+                ChatUserName.Text = friend.Username;
+                
+                var tempChatId = (uint)(Guid.NewGuid().GetHashCode() & 0x7FFFFFFF);
+                var pendingChat = new ChatDto
+                {
+                    Id = tempChatId,
+                    Name = friend.Username,
+                    LastMessage = "Продолжите общение",
+                    LastMessageTime = DateTime.Now,
+                    OtherUserId = friend.Id,
+                    IsPending = true
+                };
+
+                _pendingChats[tempChatId] = pendingChat;
+                _currentChatId = pendingChat.Id;
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    MessagesListBox.ItemsSource = new List<MessageListItem>();
+                });
+
+                var chats = await _chatService.GetUserChatsAsync();
+                UpdateChatsList(chats);
+            }
+        }
+
+        private async void OnRequestButtonClicked(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            if (button.Tag is uint userId)
+            {
+                var content = button.Content?.ToString() ?? "";
+                Console.WriteLine($"[OnRequestButtonClicked] Кнопка: {content}, UserID: {userId}");
+
+                switch (content)
+                {
+                    case "Принять":
+                        await OnAcceptIncomingClicked(userId);
+                        break;
+                    case "Отклонить":
+                        await OnRejectIncomingClicked(userId);
+                        break;
+                    case "Отменить":
+                        await OnCancelOutgoingClicked(userId);
+                        break;
+                }
+            }
+        }
+
+        private async void OnRemoveFriendClicked(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            if (button.Tag is uint friendId)
+            {
+                Console.WriteLine($"[OnRemoveFriendClicked] Удаление друга {friendId}");
+                await OnRemoveFriendAsync(friendId);
+            }
+        }
+
+        private async Task OnRemoveFriendAsync(uint friendId)
+        {
+            Console.WriteLine($"[OnRemoveFriendAsync] Удаление друга {friendId}");
+            
+            bool success = await _friendService.RemoveFriendAsync(_currentUserId, friendId);
+            if (success)
+            {
+                Console.WriteLine($"[OnRemoveFriendAsync] Друг успешно удален");
+                await LoadFriendsAsync();
+            }
+            else
+            {
+                Console.WriteLine($"[OnRemoveFriendAsync] Ошибка при удалении друга");
+            }
+        }
+
+        private async Task OnAcceptIncomingClicked(uint friendId)
+        {
+            Console.WriteLine($"[OnAcceptIncomingClicked] Принятие входящего запроса от {friendId}");
+            
+            bool success = await _friendService.AcceptFriendRequestAsync(_currentUserId, friendId);
+            if (success)
+            {
+                Console.WriteLine($"[OnAcceptIncomingClicked] Входящий запрос принят");
+                await LoadFriendRequestsAsync();
+            }
+            else
+            {
+                Console.WriteLine($"[OnAcceptIncomingClicked] Ошибка при принятии входящего запроса");
+            }
+        }
+
+        private async Task OnRejectIncomingClicked(uint friendId)
+        {
+            Console.WriteLine($"[OnRejectIncomingClicked] Отклонение входящего запроса от {friendId}");
+            
+            bool success = await _friendService.RejectFriendRequestAsync(_currentUserId, friendId);
+            if (success)
+            {
+                Console.WriteLine($"[OnRejectIncomingClicked] Входящий запрос отклонен");
+                await LoadFriendRequestsAsync();
+            }
+            else
+            {
+                Console.WriteLine($"[OnRejectIncomingClicked] Ошибка при отклонении входящего запроса");
+            }
+        }
+
+        private async Task OnCancelOutgoingClicked(uint targetUserId)
+        {
+            Console.WriteLine($"[OnCancelOutgoingClicked] Отмена исходящего запроса для {targetUserId}");
+            
+            bool success = await _friendService.RejectFriendRequestAsync(_currentUserId, targetUserId);
+            if (success)
+            {
+                Console.WriteLine($"[OnCancelOutgoingClicked] Исходящий запрос отменен");
+                await LoadFriendRequestsAsync();
+            }
+            else
+            {
+                Console.WriteLine($"[OnCancelOutgoingClicked] Ошибка при отмене исходящего запроса");
+            }
+        }
+
+        private async Task OnRemoveFriendClicked(uint friendId)
+        {
+            Console.WriteLine($"[OnRemoveFriendClicked] Удаление друга {friendId}");
+            
+            bool success = await _friendService.RemoveFriendAsync(_currentUserId, friendId);
+            if (success)
+            {
+                Console.WriteLine($"[OnRemoveFriendClicked] Друг удален");
+                await LoadFriendsAsync();
+            }
+            else
+            {
+                Console.WriteLine($"[OnRemoveFriendClicked] Ошибка при удалении друга");
+            }
+        }
+
+        private void AttachSearchResultButtonHandlers()
+        {
+            Console.WriteLine("[AttachSearchResultButtonHandlers] Прикрепление обработчиков кнопок");
+        }
+
+        private async void OnSearchResultButtonClicked(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            if (button.Tag is uint userId)
+            {
+                var content = button.Content?.ToString() ?? "";
+                Console.WriteLine($"[OnSearchResultButtonClicked] Кнопка: {content}, UserID: {userId}");
+
+                switch (content)
+                {
+                    case "Добавить в друзья":
+                        await OnAddFriendClicked(userId);
+                        break;
+                    case "Принять":
+                        await OnAcceptRequestClicked(userId);
+                        break;
+                    case "Отклонить":
+                        await OnRejectRequestClicked(userId);
+                        break;
+                    case "Отменить запрос":
+                        await OnCancelRequestClicked(userId);
+                        break;
+                }
             }
         }
     }
