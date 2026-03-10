@@ -66,15 +66,14 @@
     </Style>
   </Window.Styles>
   
-  <Grid>
-    <Grid Background="{StaticResource AppBackgroundBrush}">
-      <Grid Margin="32" ColumnDefinitions="400,*">
+  <Grid Background="{StaticResource AppBackgroundBrush}">
+      <Grid ColumnDefinitions="1*,3*">
+        <!-- Левый блок: список диалогов, поиск, статус пользователя -->
         <Border Grid.Column="0"
-                Margin="0,0,24,0"
+                Margin="0"
                 Background="{StaticResource SurfaceBrush}"
-                CornerRadius="{StaticResource CardCornerRadius}"
-                Padding="28"
-                Effect="{StaticResource SoftShadowEffect}">
+                CornerRadius="0"
+                Padding="28">
           <Grid RowDefinitions="Auto,*,Auto">
             <Border x:Name="LeftSearchPanel"
                     Background="{StaticResource SurfaceAltBrush}"
@@ -82,7 +81,6 @@
                     Padding="20"
                     Margin="0,0,0,40">
               <StackPanel Spacing="16">
-
                 <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                   <Button x:Name="SearchTabButton"
                           Content="Поиск"
@@ -95,7 +93,6 @@
                           Grid.Column="1"
                           HorizontalAlignment="Stretch"/>
                 </Grid>
-
                 <StackPanel Spacing="4">
                   <TextBlock Text="Диалоги" Classes="title"/>
                 </StackPanel>
@@ -170,12 +167,12 @@
           </Grid>
         </Border>
 
+        <!-- Правый блок: основной чат / глобальный поиск / друзья -->
         <Border Grid.Column="1"
-                Margin="24,0,0,0"
+                Margin="0"
                 Background="{StaticResource SurfaceBrush}"
-                CornerRadius="{StaticResource CardCornerRadius}"
-                Padding="32"
-                Effect="{StaticResource SoftShadowEffect}">
+                CornerRadius="0"
+                Padding="32">
           <Grid>
             <Grid x:Name="MainPanels" RowDefinitions="Auto,*,Auto">
               <Grid x:Name="ChatPanel" RowDefinitions="Auto,*,Auto" Grid.Row="0" Grid.RowSpan="3">
@@ -493,10 +490,9 @@
         <Border x:Name="SettingsPanel"
                 Grid.Column="0"
                 Background="{StaticResource SurfaceBrush}"
-                CornerRadius="{StaticResource CardCornerRadius}"
+                CornerRadius="0"
                 Padding="28"
-                Effect="{StaticResource SoftShadowEffect}"
-                Margin="0,0,24,0"
+                Margin="0"
                 IsVisible="False">
           <StackPanel Spacing="16">
             <StackPanel Orientation="Horizontal" Spacing="12">
@@ -510,9 +506,8 @@
         <Border x:Name="VoicePanel"
                 Grid.Column="1"
                 Background="{StaticResource SurfaceBrush}"
-                CornerRadius="{StaticResource CardCornerRadius}"
+                CornerRadius="0"
                 Padding="32"
-                Effect="{StaticResource SoftShadowEffect}"
                 IsVisible="False">
           <StackPanel Spacing="18">
             <TextBlock Text="Аудио" Classes="title"/>
@@ -541,6 +536,5 @@
           </StackPanel>
         </Border>
       </Grid>
-    </Grid>
   </Grid>
 </Window>
