@@ -9,5 +9,8 @@ namespace Sup.Models
 
         [JsonPropertyName("username")]
         public string Username { get; set; } = string.Empty;
+
+        [JsonPropertyName("avatarURL")]
+        public string? AvatarUrl { get; set; }
     }
 }

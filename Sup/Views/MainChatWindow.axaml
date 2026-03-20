@@ -384,9 +384,10 @@
                                 <Border Background="{StaticResource SurfaceBrush}"
                                         CornerRadius="8"
                                         Padding="12"
-                                        Margin="0,2"
+                                        Margin="0,6"
                                         Cursor="Hand"
-                                        x:Name="FriendBorder">
+                                        x:Name="FriendBorder"
+                                        Height="80">
                                     <Border.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem x:Name="RemoveFriendMenuItem"
@@ -395,9 +396,23 @@
                                                       Tag="{Binding Id}"/>
                                         </ContextMenu>
                                     </Border.ContextMenu>
-                                    <TextBlock Text="{Binding Username}" 
-                                               FontSize="14" 
-                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12" VerticalAlignment="Center">
+                                        <!-- Avatar -->
+                                        <Border Grid.Column="0" 
+                                                Width="48" 
+                                                Height="48" 
+                                                Background="Black" 
+                                                CornerRadius="6" 
+                                                ClipToBounds="True">
+                                            <Image Stretch="UniformToFill" Source="{Binding AvatarBitmap}"/>
+                                        </Border>
+                                        <!-- Username -->
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding Username}" 
+                                                   FontSize="14" 
+                                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                                   VerticalAlignment="Center"/>
+                                    </Grid>
                                 </Border>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -426,21 +441,34 @@
                                         <Border Background="{StaticResource SurfaceBrush}"
                                                 CornerRadius="8"
                                                 Padding="12"
-                                                Margin="0,2">
-                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                                                <TextBlock Grid.Column="0" 
+                                                Margin="0,6"
+                                                Height="80">
+                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12">
+                                                <!-- Avatar -->
+                                                <Border Grid.Column="0" 
+                                                        Width="48" 
+                                                        Height="48" 
+                                                        Background="Black" 
+                                                        CornerRadius="6" 
+                                                        ClipToBounds="True"
+                                                        VerticalAlignment="Center">
+                                                    <Image Stretch="UniformToFill" Source="{Binding AvatarBitmap}"/>
+                                                </Border>
+                                                <!-- Username -->
+                                                <TextBlock Grid.Column="1" 
                                                            Text="{Binding Username}" 
                                                            FontSize="14" 
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            VerticalAlignment="Center"/>
-                                                <Button Grid.Column="1" 
+                                                <!-- Buttons -->
+                                                <Button Grid.Column="2" 
                                                         x:Name="AcceptIncomingButton"
                                                         Content="Принять" 
                                                         Classes="elevated" 
                                                         Padding="8,4" 
                                                         FontSize="12"
                                                         Tag="{Binding Id}"/>
-                                                <Button Grid.Column="2" 
+                                                <Button Grid.Column="3" 
                                                         x:Name="RejectIncomingButton"
                                                         Content="Отклонить" 
                                                         Classes="outlined" 
@@ -474,14 +502,27 @@
                                         <Border Background="{StaticResource SurfaceBrush}"
                                                 CornerRadius="8"
                                                 Padding="12"
-                                                Margin="0,2">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                                <TextBlock Grid.Column="0" 
+                                                Margin="0,6"
+                                                Height="80">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                                <!-- Avatar -->
+                                                <Border Grid.Column="0" 
+                                                        Width="48" 
+                                                        Height="48" 
+                                                        Background="Black" 
+                                                        CornerRadius="6" 
+                                                        ClipToBounds="True"
+                                                        VerticalAlignment="Center">
+                                                    <Image Stretch="UniformToFill" Source="{Binding AvatarBitmap}"/>
+                                                </Border>
+                                                <!-- Username -->
+                                                <TextBlock Grid.Column="1"
                                                            Text="{Binding Username}" 
                                                            FontSize="14" 
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            VerticalAlignment="Center"/>
-                                                <Button Grid.Column="1" 
+                                                <!-- Button -->
+                                                <Button Grid.Column="2" 
                                                         x:Name="CancelOutgoingButton"
                                                         Content="Отменить запрос" 
                                                         Classes="outlined" 

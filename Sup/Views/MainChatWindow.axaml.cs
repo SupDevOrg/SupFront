@@ -1244,19 +1244,23 @@ namespace Sup.Views
         {
             Console.WriteLine($"[LoadFriendsAsync] Загрузка списка друзей для пользователя {_currentUserId}");
             var friends = await _friendService.GetFriendsAsync(_currentUserId);
-            
+
             if (friends != null && friends.Count > 0)
             {
                 var friendItems = friends.Select(f => new FriendListItemDto 
                 { 
                     Id = (uint)f.Id, 
-                    Username = f.Username 
+                    Username = f.Username,
+                    AvatarUrl = f.AvatarUrl
                 }).ToList();
-                
+
                 FriendsListBox.ItemsSource = friendItems;
                 Console.WriteLine($"[LoadFriendsAsync] Загружено {friendItems.Count} друзей");
-                
+
                 AttachFriendsListHandlers();
+
+                // Загружаем аватарки в фоне
+                _ = LoadFriendsAvatarsAsync(friendItems);
             }
             else
             {
@@ -1268,28 +1272,91 @@ namespace Sup.Views
         private async Task LoadFriendRequestsAsync()
         {
             Console.WriteLine($"[LoadFriendRequestsAsync] Загрузка входящих и исходящих запросов для пользователя {_currentUserId}");
-            
+
             var incoming = await _friendService.GetIncomingFriendRequestsAsync(_currentUserId);
             var outgoing = await _friendService.GetOutgoingFriendRequestsAsync(_currentUserId);
 
-            var incomingItems = incoming?.Select(f => new FriendListItemDto 
-            { 
-                Id = (uint)f.Id, 
-                Username = f.Username 
-            }).ToList() ?? new();
-            
-            var outgoingItems = outgoing?.Select(f => new FriendListItemDto 
-            { 
-                Id = (uint)f.Id, 
-                Username = f.Username 
-            }).ToList() ?? new();
+            // Загружаем информацию о пользователях для входящих запросов
+            var incomingItems = new List<FriendListItemDto>();
+            if (incoming != null && incoming.Count > 0)
+            {
+                foreach (var f in incoming)
+                {
+                    var userInfo = await _userSearchService.GetUserByIdAsync((uint)f.Id);
+                    incomingItems.Add(new FriendListItemDto 
+                    { 
+                        Id = (uint)f.Id, 
+                        Username = f.Username,
+                        AvatarUrl = userInfo?.AvatarUrl
+                    });
+                }
+            }
+
+            // Загружаем информацию о пользователях для исходящих запросов
+            var outgoingItems = new List<FriendListItemDto>();
+            if (outgoing != null && outgoing.Count > 0)
+            {
+                foreach (var f in outgoing)
+                {
+                    var userInfo = await _userSearchService.GetUserByIdAsync((uint)f.Id);
+                    outgoingItems.Add(new FriendListItemDto 
+                    { 
+                        Id = (uint)f.Id, 
+                        Username = f.Username,
+                        AvatarUrl = userInfo?.AvatarUrl
+                    });
+                }
+            }
 
             IncomingRequestsListBox.ItemsSource = incomingItems;
             OutgoingRequestsListBox.ItemsSource = outgoingItems;
-            
+
             Console.WriteLine($"[LoadFriendRequestsAsync] Входящих: {incomingItems.Count}, Исходящих: {outgoingItems.Count}");
-            
+
             AttachRequestsListHandlers();
+
+            // Загружаем аватарки входящих запросов
+            if (incomingItems.Count > 0)
+                _ = LoadFriendsAvatarsAsync(incomingItems);
+
+            // Загружаем аватарки исходящих запросов
+            if (outgoingItems.Count > 0)
+                _ = LoadFriendsAvatarsAsync(outgoingItems);
+        }
+
+        private async Task LoadFriendsAvatarsAsync(List<FriendListItemDto> friends)
+        {
+            try
+            {
+                Console.WriteLine($"[LoadFriendsAvatarsAsync] Загружаем аватарки для {friends.Count} друзей");
+                using (var httpClient = new System.Net.Http.HttpClient())
+                {
+                    foreach (var friend in friends)
+                    {
+                        if (string.IsNullOrEmpty(friend.AvatarUrl))
+                            continue;
+
+                        try
+                        {
+                            var imageData = await httpClient.GetByteArrayAsync(friend.AvatarUrl);
+                            var bitmap = new Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(imageData));
+                            await Dispatcher.UIThread.InvokeAsync(() =>
+                            {
+                                friend.AvatarBitmap = bitmap;
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[LoadFriendsAvatarsAsync] Ошибка загрузки аватарки {friend.Username}: {ex.Message}");
+                        }
+                    }
+                }
+                Console.WriteLine($"[LoadFriendsAvatarsAsync] Загрузка аватарок завершена");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LoadFriendsAvatarsAsync] Ошибка: {ex.Message}");
+            }
         }
 
         private void AttachFriendsListHandlers()
