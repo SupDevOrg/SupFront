@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -23,7 +23,7 @@ namespace Sup.Models
         [System.Text.Json.Serialization.JsonPropertyName("emailVerification")]
         public bool EmailVerification { get; set; }
 
-        [System.Text.Json.Serialization.JsonPropertyName("avatarUrl")]
+        [System.Text.Json.Serialization.JsonPropertyName("avatarURL")]
         public string AvatarUrl { get; set; } = string.Empty;
     }
 }

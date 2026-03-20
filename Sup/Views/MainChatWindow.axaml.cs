@@ -348,10 +348,10 @@ namespace Sup.Views
             try
             {
                 Console.WriteLine($"[InitializeAsync] Начинаем инициализацию пользователя: {_currentUsername}");
-                
+
                 // Устанавливаем timeout для инициализации
                 using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
-                
+
                 try
                 {
                     _currentUserId = await _chatService.InitializeUserAsync(_currentUsername);
@@ -361,9 +361,9 @@ namespace Sup.Views
                     Console.WriteLine($"[InitializeAsync] Ошибка инициализации пользователя: {ex.Message}");
                     _currentUserId = 0;
                 }
-                
+
                 Console.WriteLine($"[InitializeAsync] User ID загружен: {_currentUserId}");
-                
+
                 try
                 {
                     var chats = await _chatService.GetUserChatsAsync();
@@ -372,6 +372,17 @@ namespace Sup.Views
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[InitializeAsync] Ошибка загрузки чатов: {ex.Message}");
+                }
+
+                // Загружаем аватарку пользователя
+                try
+                {
+                    Console.WriteLine($"[InitializeAsync] Загружаем аватарку пользователя");
+                    await LoadUserAvatarAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[InitializeAsync] Ошибка загрузки аватарки: {ex.Message}");
                 }
             }
             catch (Exception ex)
@@ -636,6 +647,7 @@ namespace Sup.Views
                         {
                             Id = (uint)user.Id,
                             Username = user.Username,
+                            AvatarUrl = user.AvatarUrl,
                             IsFriend = status?.Status == "ACCEPTED",
                             HasIncomingRequest = status?.Status == "PENDING" && !status.IsOutgoingRequest,
                             HasOutgoingRequest = status?.Status == "PENDING" && status.IsOutgoingRequest
@@ -646,7 +658,10 @@ namespace Sup.Views
                     _currentSearchResults = searchResults;
                     GlobalUsersListBox.ItemsSource = searchResults;
                     Console.WriteLine($"[PerformSearchAsync] Найдено {searchResults.Count} пользователей на странице {page + 1}/{_totalPages}");
-                    
+
+                    // Загружаем аватарки в фоне
+                    _ = LoadSearchUserAvatarsAsync(searchResults);
+
                     AttachSearchResultButtonHandlers();
                 }
                 else
@@ -1092,8 +1107,14 @@ namespace Sup.Views
                             Console.WriteLine($"[MainChatWindow.LoadUserAvatarAsync] Изображение получено, размер: {imageData.Length} байт");
 
                             var bitmap = new Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(imageData));
+
+                            // Загружаем аватарку в панель настроек
                             AvatarImage.Source = bitmap;
-                            Console.WriteLine("[MainChatWindow.LoadUserAvatarAsync] Аватарка отображена успешно");
+                            Console.WriteLine("[MainChatWindow.LoadUserAvatarAsync] Аватарка отображена в панели настроек");
+
+                            // Загружаем аватарку в левый нижний угол
+                            UserAvatarImage.Source = bitmap;
+                            Console.WriteLine("[MainChatWindow.LoadUserAvatarAsync] Аватарка отображена в левом нижнем углу");
                         }
                         catch (Exception ex)
                         {
@@ -1105,12 +1126,65 @@ namespace Sup.Views
                 {
                     Console.WriteLine("[MainChatWindow.LoadUserAvatarAsync] URL аватарки не установлен, очищаем изображение");
                     AvatarImage.Source = null;
+                    UserAvatarImage.Source = null;
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[MainChatWindow.LoadUserAvatarAsync] Ошибка: {ex.Message}");
             }
+        }
+
+        private async Task LoadSearchUserAvatarsAsync(List<SearchResultItemDto> users)
+        {
+            try
+            {
+                Console.WriteLine($"[MainChatWindow.LoadSearchUserAvatarsAsync] Загружаем аватарки для {users.Count} пользователей");
+
+                using (var httpClient = new System.Net.Http.HttpClient())
+                {
+                    foreach (var user in users)
+                    {
+                        if (string.IsNullOrEmpty(user.AvatarUrl))
+                            continue;
+
+                        try
+                        {
+                            var imageData = await httpClient.GetByteArrayAsync(user.AvatarUrl);
+                            var bitmap = new Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(imageData));
+
+                            await Dispatcher.UIThread.InvokeAsync(() =>
+                            {
+                                user.AvatarBitmap = bitmap;
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[MainChatWindow.LoadSearchUserAvatarsAsync] Ошибка загрузки аватарки {user.Username}: {ex.Message}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MainChatWindow.LoadSearchUserAvatarsAsync] Ошибка: {ex.Message}");
+            }
+        }
+
+        // Вспомогательный метод для поиска визуального потомка
+        private T? FindVisualChild<T>(Avalonia.Visual visual) where T : Avalonia.Visual
+        {
+            if (visual is T child)
+                return child;
+
+            var visualChildren = Avalonia.VisualTree.VisualExtensions.GetVisualChildren(visual);
+            foreach (var v in visualChildren)
+            {
+                var result = FindVisualChild<T>(v);
+                if (result != null)
+                    return result;
+            }
+            return null;
         }
 
         private async Task OnChatListPollingAsync()

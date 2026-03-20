@@ -23,12 +23,27 @@ namespace Sup.Services
                 return new SearchUsersResponse();
 
             var url = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(query)}?page={page}&size={size}";
+
             var response = await _httpClient.GetAsync(url);
             if (!response.IsSuccessStatusCode)
+            {
                 return null;
+            }
 
-            using var stream = await response.Content.ReadAsStreamAsync();
-            return await JsonSerializer.DeserializeAsync<SearchUsersResponse>(stream);
+            var content = await response.Content.ReadAsStringAsync();
+
+            try
+            {
+                var result = JsonSerializer.Deserialize<SearchUsersResponse>(content, 
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[UserSearchService.SearchAsync] Ошибка десериализации: {ex.Message}");
+                return null;
+            }
         }
 
         public async Task<UserDto?> GetUserByIdAsync(uint userId)
