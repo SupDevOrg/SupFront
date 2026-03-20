@@ -13,5 +13,17 @@ namespace Sup.Models
 
         [System.Text.Json.Serialization.JsonPropertyName("username")]
         public string Username { get; set; } = string.Empty;
+
+        [System.Text.Json.Serialization.JsonPropertyName("email")]
+        public string Email { get; set; } = string.Empty;
+
+        [System.Text.Json.Serialization.JsonPropertyName("phone")]
+        public string Phone { get; set; } = string.Empty;
+
+        [System.Text.Json.Serialization.JsonPropertyName("emailVerification")]
+        public bool EmailVerification { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("avatarUrl")]
+        public string AvatarUrl { get; set; } = string.Empty;
     }
 }

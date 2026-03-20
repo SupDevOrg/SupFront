@@ -499,7 +499,8 @@
               <Button x:Name="BackFromSettingsButton" Content="Назад" Classes="outlined" Width="120"/>
               <TextBlock Text="Настройки" Classes="title" VerticalAlignment="Center"/>
             </StackPanel>
-            <Button x:Name="VoiceSettingsButton" Content="Голосовые настройки"/>
+            <Button x:Name="VoiceSettingsButton" Content="Голосовые настройки" HorizontalAlignment="Stretch"/>
+            <Button x:Name="AvatarSettingsButton" Content="Смена аватарки" HorizontalAlignment="Stretch"/>
           </StackPanel>
         </Border>
 
@@ -532,6 +533,35 @@
                   </Border>
                 </StackPanel>
               </Grid>
+            </Border>
+          </StackPanel>
+        </Border>
+
+        <Border x:Name="AvatarPanel"
+                Grid.Column="1"
+                Background="{StaticResource SurfaceBrush}"
+                CornerRadius="0"
+                Padding="32"
+                IsVisible="False">
+          <StackPanel Spacing="18">
+            <TextBlock Text="Аватарка" Classes="title"/>
+
+            <Border Padding="20,20" ClipToBounds="False">
+              <StackPanel Spacing="20" HorizontalAlignment="Center">
+                <Border Width="512" Height="512" Background="Black" CornerRadius="8" ClipToBounds="True">
+                  <Image x:Name="AvatarImage" 
+                         Stretch="UniformToFill"/>
+                </Border>
+                <StackPanel Spacing="12" HorizontalAlignment="Center">
+                  <Button x:Name="SelectAvatarButton" Content="Сменить аватарку" Width="300" HorizontalAlignment="Center"/>
+                  <TextBlock x:Name="AvatarStatusMessage" 
+                             Text="" 
+                             FontSize="14" 
+                             Foreground="Green"
+                             HorizontalAlignment="Center"
+                             TextWrapping="Wrap"/>
+                </StackPanel>
+              </StackPanel>
             </Border>
           </StackPanel>
         </Border>

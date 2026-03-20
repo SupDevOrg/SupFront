@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using NAudio.CoreAudioApi;
 using Sup.Models;
@@ -19,6 +20,7 @@ namespace Sup.Views
         private readonly IVoiceTestService _voiceTestService;
         private readonly IWebSocketService _webSocketService;
         private readonly IFriendService _friendService;
+        private readonly IUserAvatarService _userAvatarService;
 
         private uint _currentUserId = 0;
         private uint? _currentChatId = null;
@@ -33,6 +35,9 @@ namespace Sup.Views
         private Dictionary<uint, ChatDto> _pendingChats = new Dictionary<uint, ChatDto>();
         private bool _isVoiceTestActive = false;
         private List<SearchResultItemDto> _currentSearchResults = new();
+        private string _selectedAvatarFilePath = string.Empty;
+        private bool _isAvatarPendingConfirmation = false;
+        private byte[] _resizedAvatarData = Array.Empty<byte>();
 
         public MainChatWindow() : this("user")
         {
@@ -49,6 +54,7 @@ namespace Sup.Views
                 _voiceTestService = new VoiceTestService();
                 _webSocketService = new WebSocketService();
                 _friendService = new FriendService();
+                _userAvatarService = new UserAvatarService();
             }
             catch (Exception ex)
             {
@@ -83,8 +89,10 @@ namespace Sup.Views
             GlobalUsersListBox.DoubleTapped += OnGlobalUserSelected;
             SettingsButton.Click += OnSettingsClicked;
             VoiceSettingsButton.Click += OnVoiceSettingsClicked;
+            AvatarSettingsButton.Click += OnAvatarSettingsClicked;
             BackFromSettingsButton.Click += OnBackFromSettingsClicked;
             TestVoiceButton.Click += OnTestVoiceClicked;
+            SelectAvatarButton.Click += OnSelectAvatarClicked;
             PrevPageButton.Click += OnPrevPageClick;
             NextPageButton.Click += OnNextPageClick;
             SendMessageButton.Click += OnSendMessageClicked;
@@ -824,7 +832,28 @@ namespace Sup.Views
         {
             Console.WriteLine("[OnVoiceSettingsClicked] Открыты голосовые настройки");
             VoicePanel.IsVisible = true;
+            AvatarPanel.IsVisible = false;
             LoadAudioDevices();
+        }
+
+        private void ResetAvatarButtonState()
+        {
+            Console.WriteLine("[MainChatWindow.ResetAvatarButtonState] Сброс состояния кнопки аватарки");
+            _isAvatarPendingConfirmation = false;
+            _selectedAvatarFilePath = string.Empty;
+            _resizedAvatarData = Array.Empty<byte>();
+            SelectAvatarButton.Content = "Сменить аватарку";
+        }
+
+        private async void OnAvatarSettingsClicked(object? sender, RoutedEventArgs e)
+        {
+            Console.WriteLine("[MainChatWindow.OnAvatarSettingsClicked] Открыта панель настроек аватарки");
+            AvatarPanel.IsVisible = true;
+            VoicePanel.IsVisible = false;
+            AvatarStatusMessage.Text = string.Empty;
+            ResetAvatarButtonState();
+            Console.WriteLine("[MainChatWindow.OnAvatarSettingsClicked] Состояние сброшено, начинаем загрузку аватарки");
+            await LoadUserAvatarAsync();
         }
 
         private void OnBackFromSettingsClicked(object? sender, RoutedEventArgs e)
@@ -832,6 +861,7 @@ namespace Sup.Views
             Console.WriteLine("[OnBackFromSettingsClicked] Закрыты настройки");
             SettingsPanel.IsVisible = false;
             VoicePanel.IsVisible = false;
+            AvatarPanel.IsVisible = false;
             MainPanels.IsVisible = true;
             LeftSearchPanel.IsVisible = true;
         }
@@ -891,6 +921,196 @@ namespace Sup.Views
         private void OnAudioLevelChanged(object? sender, AudioLevelChangedEventArgs e)
         {
             VoiceVolumeSlider.Value = e.CurrentVolume;
+        }
+
+        private async void OnSelectAvatarClicked(object? sender, RoutedEventArgs e)
+        {
+            // Если аватарка уже выбрана и ожидает подтверждения
+            if (_isAvatarPendingConfirmation)
+            {
+                Console.WriteLine("[MainChatWindow.OnSelectAvatarClicked] Подтверждение смены аватарки");
+                await OnConfirmAvatarClicked();
+                return;
+            }
+
+            // Иначе - выбор файла
+            Console.WriteLine("[MainChatWindow.OnSelectAvatarClicked] Открыт диалог выбора аватарки");
+            try
+            {
+                var topLevel = TopLevel.GetTopLevel(this);
+                if (topLevel == null)
+                {
+                    Console.WriteLine("[MainChatWindow.OnSelectAvatarClicked] Ошибка: не удалось получить TopLevel");
+                    return;
+                }
+
+                Console.WriteLine("[MainChatWindow.OnSelectAvatarClicked] Показываем диалог выбора файла");
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = "Выберите файл аватарки",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[] {
+                        new FilePickerFileType("Изображения") {
+                            Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif" }
+                        }
+                    }
+                });
+
+                if (files.Count > 0)
+                {
+                    var file = files[0];
+                    var path = file.Path.LocalPath;
+                    Console.WriteLine($"[MainChatWindow.OnSelectAvatarClicked] Файл выбран: {path}");
+
+                    // Сразу масштабируем для предпросмотра
+                    Console.WriteLine("[MainChatWindow.OnSelectAvatarClicked] Масштабируем изображение до 512x512 для предпросмотра");
+                    var resizedImageData = _userAvatarService.ResizeImageTo512(path);
+
+                    if (resizedImageData.Length == 0)
+                    {
+                        Console.WriteLine("[MainChatWindow.OnSelectAvatarClicked] Ошибка: не удалось масштабировать изображение");
+                        AvatarStatusMessage.Text = "Ошибка обработки изображения";
+                        AvatarStatusMessage.Foreground = Avalonia.Media.Brushes.Red;
+                        return;
+                    }
+
+                    // Показываем масштабированный предпросмотр
+                    Console.WriteLine("[MainChatWindow.OnSelectAvatarClicked] Отображаем масштабированный предпросмотр (512x512)");
+                    var previewImage = new Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(resizedImageData));
+                    AvatarImage.Source = previewImage;
+
+                    // Сохраняем путь, масштабированные данные и меняем состояние
+                    _selectedAvatarFilePath = path;
+                    _resizedAvatarData = resizedImageData;
+                    _isAvatarPendingConfirmation = true;
+                    SelectAvatarButton.Content = "Подтвердить смену аватарки";
+                    AvatarStatusMessage.Text = string.Empty;
+                    Console.WriteLine("[MainChatWindow.OnSelectAvatarClicked] Кнопка изменена на 'Подтвердить смену аватарки'");
+                }
+                else
+                {
+                    Console.WriteLine("[MainChatWindow.OnSelectAvatarClicked] Файл не выбран");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MainChatWindow.OnSelectAvatarClicked] Ошибка: {ex.Message}");
+                AvatarStatusMessage.Text = "Ошибка выбора файла";
+                AvatarStatusMessage.Foreground = Avalonia.Media.Brushes.Red;
+            }
+        }
+
+        private async Task OnConfirmAvatarClicked()
+        {
+            Console.WriteLine("[MainChatWindow.OnConfirmAvatarClicked] Начинаем процесс подтверждения и загрузки аватарки");
+
+            if (string.IsNullOrEmpty(_selectedAvatarFilePath) || _resizedAvatarData.Length == 0)
+            {
+                Console.WriteLine("[MainChatWindow.OnConfirmAvatarClicked] Ошибка: путь к файлу или масштабированные данные не установлены");
+                AvatarStatusMessage.Text = "Неудачная смена аватарки";
+                AvatarStatusMessage.Foreground = Avalonia.Media.Brushes.Red;
+                ResetAvatarButtonState();
+                return;
+            }
+
+            try
+            {
+                // Используем уже масштабированные данные из предпросмотра
+                Console.WriteLine("[MainChatWindow.OnConfirmAvatarClicked] Используем сохранённые масштабированные данные (512x512)");
+                var resizedImageData = _resizedAvatarData;
+
+                // Определяем тип контента и имя файла
+                var ext = System.IO.Path.GetExtension(_selectedAvatarFilePath).ToLower();
+                var fileName = System.IO.Path.GetFileName(_selectedAvatarFilePath);
+                var contentType = ext switch
+                {
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    ".png" => "image/png",
+                    ".webp" => "image/webp",
+                    _ => "image/jpeg"
+                };
+                Console.WriteLine($"[MainChatWindow.OnConfirmAvatarClicked] Тип контента: {contentType}, Имя файла: {fileName}");
+
+                // Получаем URL для загрузки
+                Console.WriteLine("[MainChatWindow.OnConfirmAvatarClicked] Запрашиваем URL для загрузки");
+                var uploadUrlResponse = await _userAvatarService.GetAvatarUploadUrlAsync(contentType, fileName);
+                if (string.IsNullOrEmpty(uploadUrlResponse.UploadUrl))
+                {
+                    Console.WriteLine("[MainChatWindow.OnConfirmAvatarClicked] Ошибка: не удалось получить URL для загрузки");
+                    AvatarStatusMessage.Text = "Неудачная смена аватарки";
+                    AvatarStatusMessage.Foreground = Avalonia.Media.Brushes.Red;
+                    ResetAvatarButtonState();
+                    return;
+                }
+
+                // Загружаем аватарку
+                Console.WriteLine("[MainChatWindow.OnConfirmAvatarClicked] Начинаем загрузку аватарки на сервер");
+                bool uploadSuccess = await _userAvatarService.UploadAvatarAsync(uploadUrlResponse.UploadUrl, resizedImageData, contentType);
+
+                if (uploadSuccess)
+                {
+                    Console.WriteLine("[MainChatWindow.OnConfirmAvatarClicked] Загрузка успешна, обновляем данные пользователя");
+                    AvatarStatusMessage.Text = "Успешная смена аватарки";
+                    AvatarStatusMessage.Foreground = Avalonia.Media.Brushes.Green;
+                    ResetAvatarButtonState();
+                    // Перезагружаем пользовательские данные
+                    await LoadUserAvatarAsync();
+                }
+                else
+                {
+                    Console.WriteLine("[MainChatWindow.OnConfirmAvatarClicked] Ошибка при загрузке аватарки");
+                    AvatarStatusMessage.Text = "Неудачная смена аватарки";
+                    AvatarStatusMessage.Foreground = Avalonia.Media.Brushes.Red;
+                    ResetAvatarButtonState();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MainChatWindow.OnConfirmAvatarClicked] Ошибка: {ex.Message}");
+                AvatarStatusMessage.Text = "Неудачная смена аватарки";
+                AvatarStatusMessage.Foreground = Avalonia.Media.Brushes.Red;
+                ResetAvatarButtonState();
+            }
+        }
+
+        private async Task LoadUserAvatarAsync()
+        {
+            try
+            {
+                Console.WriteLine("[MainChatWindow.LoadUserAvatarAsync] Начало загрузки аватарки пользователя");
+                var user = await _userAvatarService.GetCurrentUserAsync();
+
+                if (!string.IsNullOrEmpty(user.AvatarUrl))
+                {
+                    Console.WriteLine($"[MainChatWindow.LoadUserAvatarAsync] URL аватарки: {user.AvatarUrl}");
+                    using (var httpClient = new System.Net.Http.HttpClient())
+                    {
+                        try
+                        {
+                            Console.WriteLine($"[MainChatWindow.LoadUserAvatarAsync] Загружаем изображение с сервера");
+                            var imageData = await httpClient.GetByteArrayAsync(user.AvatarUrl);
+                            Console.WriteLine($"[MainChatWindow.LoadUserAvatarAsync] Изображение получено, размер: {imageData.Length} байт");
+
+                            var bitmap = new Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(imageData));
+                            AvatarImage.Source = bitmap;
+                            Console.WriteLine("[MainChatWindow.LoadUserAvatarAsync] Аватарка отображена успешно");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[MainChatWindow.LoadUserAvatarAsync] Ошибка загрузки изображения: {ex.Message}");
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("[MainChatWindow.LoadUserAvatarAsync] URL аватарки не установлен, очищаем изображение");
+                    AvatarImage.Source = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MainChatWindow.LoadUserAvatarAsync] Ошибка: {ex.Message}");
+            }
         }
 
         private async Task OnChatListPollingAsync()
