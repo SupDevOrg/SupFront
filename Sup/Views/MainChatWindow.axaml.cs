@@ -638,16 +638,21 @@ namespace Sup.Views
                 {
                     _totalPages = response.TotalPages;
                     UpdatePaginationInfo();
-                    
+
                     var searchResults = new List<SearchResultItemDto>();
                     foreach (var user in response.Users ?? new())
                     {
                         var status = await _friendService.CheckFriendshipStatusAsync(_currentUserId, (uint)user.Id);
+
+                        // Получаем полную информацию о пользователе, включая AvatarUrl
+                        var userInfo = await _userSearchService.GetUserByIdAsync((uint)user.Id);
+                        var avatarUrl = userInfo?.AvatarUrl ?? user.AvatarUrl;
+
                         var result = new SearchResultItemDto
                         {
                             Id = (uint)user.Id,
                             Username = user.Username,
-                            AvatarUrl = user.AvatarUrl,
+                            AvatarUrl = avatarUrl,
                             IsFriend = status?.Status == "ACCEPTED",
                             HasIncomingRequest = status?.Status == "PENDING" && !status.IsOutgoingRequest,
                             HasOutgoingRequest = status?.Status == "PENDING" && status.IsOutgoingRequest
