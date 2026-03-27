@@ -36,7 +36,8 @@ namespace Sup.Services
                     return false;
 
                 _ws.Options.SetRequestHeader("Authorization", $"Bearer {tokenData.AccessToken}");
-                var wsUrl = $"{App.WsBaseUrl}?user_id_1={currentUserId}&user_id_2={otherUserId}";
+                _ws.Options.SetRequestHeader("X-Auth-User-ID", currentUserId.ToString());
+                var wsUrl = App.WsBaseUrl.Replace("ws://", "wss://", StringComparison.OrdinalIgnoreCase);
                 await _ws.ConnectAsync(new Uri(wsUrl), _cts.Token);
                 _listenTask = ListenAsync();
                 return true;

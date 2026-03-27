@@ -414,6 +414,36 @@ namespace Sup.Views
             }
         }
 
+        private void UpdateCurrentChatPreview(uint chatId, string content, DateTime timestamp)
+        {
+            try
+            {
+                var items = (UsersListBox.ItemsSource as List<ChatListItem> ?? new List<ChatListItem>()).ToList();
+                var existing = items.FirstOrDefault(i => i.ChatId == chatId);
+                if (existing == null)
+                    return;
+
+                existing.LastMessage = content.Length > 50 ? content.Substring(0, 50) + "..." : content;
+                existing.LastMessageTime = timestamp.ToString("HH:mm");
+
+                items = items
+                    .OrderByDescending(i => i.ChatId == chatId)
+                    .ThenByDescending(i =>
+                    {
+                        if (DateTime.TryParse(i.LastMessageTime, out var parsed))
+                            return parsed;
+                        return DateTime.MinValue;
+                    })
+                    .ToList();
+
+                UsersListBox.ItemsSource = items;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[UpdateCurrentChatPreview] Ошибка: {ex.Message}");
+            }
+        }
+
         private async void OnChatSelected(object? sender, SelectionChangedEventArgs e)
         {
             await RemoveEmptyPendingChatIfCurrentAsync();
@@ -460,7 +490,7 @@ namespace Sup.Views
 
                 foreach (var msg in sortedMessages)
                 {
-                    string senderName = msg.SenderId == _currentUserId ? $"{_currentUsername}" : $"Пользователь {msg.SenderId}";
+                    var senderName = await ResolveSenderNameAsync(msg.SenderId);
                     items.Add(new MessageListItem
                     {
                         Id = msg.Id,
@@ -485,6 +515,18 @@ namespace Sup.Views
             {
                 Console.WriteLine($"[UpdateMessagesListAsync] Ошибка: {ex.Message}");
             }
+        }
+
+        private async Task<string> ResolveSenderNameAsync(uint senderId)
+        {
+            if (senderId == _currentUserId)
+                return _currentUsername;
+
+            if (!string.IsNullOrWhiteSpace(_currentChatUserName))
+                return _currentChatUserName;
+
+            var loaded = await _chatService.GetUserNameByIdAsync(senderId);
+            return !string.IsNullOrWhiteSpace(loaded) ? loaded : $"Пользователь {senderId}";
         }
 
         private void ScrollToLatest()
@@ -551,36 +593,33 @@ namespace Sup.Views
 
                 // Пытаемся сохранить сообщение через REST, чтобы оно грузилось после перезапуска
                 var saved = await _chatService.SendMessageAsync(_currentChatId.Value, message);
+                var sentViaWebSocketFallback = saved == null;
                 if (saved == null)
                 {
                     // Фоллбек на WebSocket (если backend не поддерживает REST-эндпоинт сохранения)
                     await _webSocketService.SendAsync(message);
-
-                    saved = new MessageDto
-                    {
-                        Id = 0,
-                        ChatId = _currentChatId.Value,
-                        SenderId = _currentUserId,
-                        Content = message,
-                        CreatedAt = DateTime.Now
-                    };
                 }
 
-                var messages = (MessagesListBox.ItemsSource as List<MessageListItem> ?? new()).ToList();
-                messages.Add(new MessageListItem
+                if (!sentViaWebSocketFallback && saved != null)
                 {
-                    Id = saved.Id,
-                    ChatId = saved.ChatId,
-                    SenderId = saved.SenderId,
-                    Content = saved.Content,
-                    IsOwnMessage = saved.SenderId == _currentUserId,
-                    Time = saved.CreatedAt.ToString("HH:mm"),
-                    SenderName = $"{_currentUsername}"
-                });
-                MessagesListBox.ItemsSource = messages;
+                    var messages = (MessagesListBox.ItemsSource as List<MessageListItem> ?? new()).ToList();
+                    messages.Add(new MessageListItem
+                    {
+                        Id = saved.Id,
+                        ChatId = saved.ChatId,
+                        SenderId = saved.SenderId,
+                        Content = saved.Content,
+                        IsOwnMessage = saved.SenderId == _currentUserId,
+                        Time = saved.CreatedAt.ToString("HH:mm"),
+                        SenderName = $"{_currentUsername}"
+                    });
+                    MessagesListBox.ItemsSource = messages;
+                    UpdateCurrentChatPreview(saved.ChatId, saved.Content, saved.CreatedAt);
+                }
 
                 Console.WriteLine("[OnSendMessageClicked] Сообщение отправлено");
-                ScrollToLatest();
+                if (!sentViaWebSocketFallback)
+                    ScrollToLatest();
             }
             catch (Exception ex)
             {
@@ -595,10 +634,19 @@ namespace Sup.Views
 
             Console.WriteLine($"[OnWebSocketMessageReceived] Сообщение в чат {e.ChatId}: {e.Content.Substring(0, Math.Min(50, e.Content.Length))}");
 
+            var senderName = await ResolveSenderNameAsync(e.SenderUId);
+
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 var messages = (MessagesListBox.ItemsSource as List<MessageListItem> ?? new()).ToList();
                 if (e.Id != 0 && messages.Any(m => m.Id == e.Id))
+                    return;
+
+                if (e.Id == 0 && messages.Any(m =>
+                    m.ChatId == e.ChatId &&
+                    m.SenderId == e.SenderUId &&
+                    string.Equals(m.Content, e.Content, StringComparison.Ordinal) &&
+                    m.Time == e.CreatedAt.ToString("HH:mm")))
                     return;
 
                 messages.Add(new MessageListItem
@@ -609,9 +657,10 @@ namespace Sup.Views
                     Content = e.Content,
                     IsOwnMessage = e.SenderUId == _currentUserId,
                     Time = e.CreatedAt.ToString("HH:mm"),
-                    SenderName = e.SenderUId == _currentUserId ? $"{_currentUsername}" : $"Пользователь {e.SenderUId}"
+                    SenderName = senderName
                 });
                 MessagesListBox.ItemsSource = messages;
+                UpdateCurrentChatPreview(e.ChatId, e.Content, e.CreatedAt);
                 ScrollToLatest();
             });
         }

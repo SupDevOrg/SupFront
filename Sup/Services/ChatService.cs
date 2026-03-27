@@ -51,14 +51,10 @@ namespace Sup.Services
             if (_currentUserId == 0)
                 return new List<ChatDto>();
 
-            var request = new { user_id = _currentUserId };
-            var json = JsonSerializer.Serialize(request);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.PostAsync($"{_messageServiceBaseUrl}/chat/user", content);
+            var response = await SendWithUserHeaderAsync(HttpMethod.Get, $"{_messageServiceBaseUrl}/chats");
             if (!response.IsSuccessStatusCode)
             {
-                // Необработанные ошибки будут обработаны вызывающим кодом
+                Console.WriteLine($"[ChatService.GetUserChatsAsync] GET {_messageServiceBaseUrl}/chats -> {response.StatusCode}");
                 return new List<ChatDto>();
             }
 
@@ -84,9 +80,15 @@ namespace Sup.Services
                     string lastMessage = "Нет сообщений";
                     DateTime lastMessageTime = DateTime.Now;
 
-                    // Загружаем сообщения для определения otherUserId и получения последнего сообщения
-                    var url = $"{_messageServiceBaseUrl}/messages/{chatInfo.Id}?user_id={_currentUserId}&page=1&page_size=20";
-                    var response = await _httpClient.GetAsync(url);
+                    if (!_chatToOtherUserIdCache.TryGetValue(chatInfo.Id, out otherUserId))
+                    {
+                        otherUserId = await GetChatInfoAsync(chatInfo.Id) ?? 0;
+                        if (otherUserId > 0)
+                            _chatToOtherUserIdCache[chatInfo.Id] = otherUserId;
+                    }
+
+                    var url = $"{_messageServiceBaseUrl}/messages/{chatInfo.Id}?page=1&page_size=20";
+                    var response = await SendWithUserHeaderAsync(HttpMethod.Get, url);
 
                     if (response.IsSuccessStatusCode)
                     {
@@ -102,12 +104,11 @@ namespace Sup.Services
                             lastMessage = lastMsg.Content.Length > 50 ? lastMsg.Content.Substring(0, 50) + "..." : lastMsg.Content;
                             lastMessageTime = lastMsg.CreatedAt;
                             
-                            // Определяем otherUserId если его нет в кэше
-                            if (!_chatToOtherUserIdCache.TryGetValue(chatInfo.Id, out otherUserId))
+                            if (otherUserId == 0)
                             {
                                 var allSenderIds = messagesResponse.Messages.Select(m => m.SenderId).Distinct().ToList();
                                 otherUserId = allSenderIds.FirstOrDefault(id => id != _currentUserId);
-                                
+
                                 if (otherUserId > 0)
                                 {
                                     _chatToOtherUserIdCache[chatInfo.Id] = otherUserId;
@@ -166,80 +167,30 @@ namespace Sup.Services
         {
             try
             {
-                // Пытаемся получить участников чата
-                var urls = new[]
-                {
-                    $"{_messageServiceBaseUrl}/message/chat/{chatId}/members",
-                    $"{_messageServiceBaseUrl}/message/chat/{chatId}/participants",
-                    $"{_messageServiceBaseUrl}/chat/{chatId}/members",
-                    $"{_messageServiceBaseUrl}/members/chat/{chatId}"
-                };
+                var url = $"{_messageServiceBaseUrl}/chats/{chatId}/members";
+                Console.WriteLine($"[GetChatInfoAsync] Запрашиваем участников чата {chatId}: {url}");
+                var response = await SendWithUserHeaderAsync(HttpMethod.Get, url);
 
-                foreach (var url in urls)
+                if (!response.IsSuccessStatusCode)
                 {
-                    try
-                    {
-                        Console.WriteLine($"[GetChatInfoAsync] Запрашиваем участников чата {chatId}: {url}");
-                        var response = await _httpClient.GetAsync(url);
-                        
-                        if (response.IsSuccessStatusCode)
-                        {
-                            var content = await response.Content.ReadAsStringAsync();
-                            Console.WriteLine($"[GetChatInfoAsync] Успешно получены участники чата {chatId} по URL: {url}");
-                            Console.WriteLine($"[GetChatInfoAsync] Содержимое ответа (первые 200 символов): {content.Substring(0, Math.Min(200, content.Length))}");
-                            
-                            using var doc = JsonDocument.Parse(content);
-                            var root = doc.RootElement;
-
-                            // Пытаемся найти список участников
-                            if (root.TryGetProperty("members", out var membersElem) && membersElem.ValueKind == System.Text.Json.JsonValueKind.Array)
-                            {
-                                Console.WriteLine($"[GetChatInfoAsync] Найдено поле 'members' с {membersElem.GetArrayLength()} элементами");
-                                var otherUserId = FindOtherUserIdFromMembers(membersElem);
-                                if (otherUserId > 0)
-                                {
-                                    Console.WriteLine($"[GetChatInfoAsync] Успешно найден другой пользователь {otherUserId} в чате {chatId}");
-                                    return otherUserId;
-                                }
-                            }
-                            else if (root.TryGetProperty("participants", out var participantsElem) && participantsElem.ValueKind == System.Text.Json.JsonValueKind.Array)
-                            {
-                                Console.WriteLine($"[GetChatInfoAsync] Найдено поле 'participants' с {participantsElem.GetArrayLength()} элементами");
-                                var otherUserId = FindOtherUserIdFromMembers(participantsElem);
-                                if (otherUserId > 0)
-                                {
-                                    Console.WriteLine($"[GetChatInfoAsync] Успешно найден другой пользователь {otherUserId} в чате {chatId}");
-                                    return otherUserId;
-                                }
-                            }
-                            else if (root.ValueKind == System.Text.Json.JsonValueKind.Array)
-                            {
-                                // Если сам корень - массив
-                                Console.WriteLine($"[GetChatInfoAsync] Корень - массив с {root.GetArrayLength()} элементами");
-                                var otherUserId = FindOtherUserIdFromMembers(root);
-                                if (otherUserId > 0)
-                                {
-                                    Console.WriteLine($"[GetChatInfoAsync] Успешно найден другой пользователь {otherUserId} в чате {chatId}");
-                                    return otherUserId;
-                                }
-                            }
-                            else
-                            {
-                                Console.WriteLine($"[GetChatInfoAsync] Не найдена структура members/participants/array в ответе");
-                            }
-                        }
-                        else
-                        {
-                            Console.WriteLine($"[GetChatInfoAsync] Ошибка запроса {url}: {response.StatusCode}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[GetChatInfoAsync] Исключение при запросе {url}: {ex.Message}");
-                    }
+                    Console.WriteLine($"[GetChatInfoAsync] GET {url} -> {response.StatusCode}");
+                    return null;
                 }
-                
-                Console.WriteLine($"[GetChatInfoAsync] Не удалось получить участников чата {chatId}");
+
+                var content = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"[GetChatInfoAsync] Успешно получены участники чата {chatId}");
+
+                using var doc = JsonDocument.Parse(content);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("members", out var membersElem) && membersElem.ValueKind == JsonValueKind.Array)
+                {
+                    var otherUserId = FindOtherUserIdFromMembers(membersElem);
+                    if (otherUserId > 0)
+                        return otherUserId;
+                }
+
+                Console.WriteLine($"[GetChatInfoAsync] Поле members не найдено или не содержит другого пользователя для чата {chatId}");
             }
             catch (Exception ex)
             {
@@ -360,17 +311,72 @@ namespace Sup.Services
         {
             try
             {
-                var req = new { user_id_1 = _currentUserId, user_id_2 = otherUserId };
-                var json = JsonSerializer.Serialize(req);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-                var resp = await _httpClient.PostAsync($"{_messageServiceBaseUrl}/chat/bytwouser", content);
-                if (!resp.IsSuccessStatusCode)
+                if (_currentUserId == 0)
+                {
+                    Console.WriteLine("[ChatService.CreateChatAsync] currentUserId=0, чат не может быть создан");
                     return null;
+                }
+
+                if (otherUserId == 0)
+                {
+                    Console.WriteLine("[ChatService.CreateChatAsync] otherUserId=0, чат не может быть создан");
+                    return null;
+                }
+
+                var req = new { user_id = otherUserId };
+                var json = JsonSerializer.Serialize(req);
+                var url = $"{_messageServiceBaseUrl}/chats";
+                Console.WriteLine($"[ChatService.CreateChatAsync] POST {url} payload={json}");
+
+                var resp = await SendWithUserHeaderAsync(HttpMethod.Post, url, new StringContent(json, Encoding.UTF8, "application/json"));
+                if (!resp.IsSuccessStatusCode)
+                {
+                    var errorBody = await resp.Content.ReadAsStringAsync();
+                    Console.WriteLine($"[ChatService.CreateChatAsync] POST {url} -> {resp.StatusCode}. Body(первые 300): {errorBody.Substring(0, Math.Min(300, errorBody.Length))}");
+                    return null;
+                }
+
                 var respJson = await resp.Content.ReadAsStringAsync();
+                Console.WriteLine($"[ChatService.CreateChatAsync] POST {url} -> OK. Body: {respJson.Substring(0, Math.Min(300, respJson.Length))}");
+
                 using var d = JsonDocument.Parse(respJson);
-                return d.RootElement.GetProperty("chat_id").GetUInt32();
+                var root = d.RootElement;
+
+                if (root.TryGetProperty("chat_id", out var chatIdElem))
+                {
+                    if (chatIdElem.ValueKind == JsonValueKind.Number && chatIdElem.TryGetUInt32(out var chatId))
+                        return chatId;
+
+                    if (chatIdElem.ValueKind == JsonValueKind.Object)
+                    {
+                        if (chatIdElem.TryGetProperty("id", out var chatObjIdElem) && chatObjIdElem.TryGetUInt32(out var chatObjId))
+                            return chatObjId;
+                    }
+                }
+
+                if (root.TryGetProperty("id", out var idElem) && idElem.TryGetUInt32(out var id))
+                    return id;
+
+                if (root.TryGetProperty("chat", out var chatElem))
+                {
+                    if (chatElem.ValueKind == JsonValueKind.Object)
+                    {
+                        if (chatElem.TryGetProperty("chat_id", out var nestedChatIdElem) && nestedChatIdElem.TryGetUInt32(out var nestedChatId))
+                            return nestedChatId;
+
+                        if (chatElem.TryGetProperty("id", out var nestedIdElem) && nestedIdElem.TryGetUInt32(out var nestedId))
+                            return nestedId;
+                    }
+                }
+
+                Console.WriteLine("[ChatService.CreateChatAsync] Не удалось извлечь chat_id/id из ответа сервера");
+                return null;
             }
-            catch { return null; }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChatService.CreateChatAsync] Исключение: {ex.Message}");
+                return null;
+            }
         }
 
         public void PreCacheChatInfo(uint chatId, uint otherUserId, string username)
@@ -398,59 +404,27 @@ namespace Sup.Services
             var result = new List<MessageDto>();
             try
             {
-                // На backend'ах часто отличаются query-параметры и индексация страниц (0/1).
-                // Пробуем несколько вариантов, а при 400 логируем тело ответа.
-                var urls = new[]
+                var url = $"{_messageServiceBaseUrl}/messages/{chatId}?page={page}&page_size={pageSize}";
+                var resp = await SendWithUserHeaderAsync(HttpMethod.Get, url);
+                if (!resp.IsSuccessStatusCode)
                 {
-                    // текущий вариант (page starts at 1, page_size)
-                    $"{_messageServiceBaseUrl}/messages/{chatId}?user_id={_currentUserId}&page={page}&page_size={pageSize}",
-                    // page starts at 0
-                    $"{_messageServiceBaseUrl}/messages/{chatId}?user_id={_currentUserId}&page={Math.Max(0, page - 1)}&page_size={pageSize}",
-                    // size вместо page_size
-                    $"{_messageServiceBaseUrl}/messages/{chatId}?user_id={_currentUserId}&page={Math.Max(0, page - 1)}&size={pageSize}",
-                    // без user_id (иногда берут из токена)
-                    $"{_messageServiceBaseUrl}/messages/{chatId}?page={Math.Max(0, page - 1)}&size={pageSize}",
-                    $"{_messageServiceBaseUrl}/messages/{chatId}?page={Math.Max(0, page - 1)}&page_size={pageSize}",
-                };
-
-                HttpResponseMessage? lastResp = null;
-                foreach (var url in urls)
-                {
-                    var resp = await _httpClient.GetAsync(url);
-                    lastResp = resp;
-                    if (!resp.IsSuccessStatusCode)
-                    {
-                        if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest)
-                        {
-                            var body = await resp.Content.ReadAsStringAsync();
-                            Console.WriteLine($"[ChatService.LoadChatHistoryAsync] 400 для {url}. Body(первые 200): {body.Substring(0, Math.Min(200, body.Length))}");
-                        }
-                        else
-                        {
-                            Console.WriteLine($"[ChatService.LoadChatHistoryAsync] GET {url} -> {resp.StatusCode}");
-                        }
-                        continue;
-                    }
-
-                    var responseContent = await resp.Content.ReadAsStringAsync();
-                    var messagesResponse = JsonSerializer.Deserialize<MessagesResponse>(responseContent);
-                    if (messagesResponse?.Messages != null)
-                    {
-                        result = messagesResponse.Messages.OrderBy(m => m.CreatedAt).ToList();
-                        // Предварительная загрузка имён
-                        var ids = result.Where(m => m.SenderId != _currentUserId).Select(m => m.SenderId).Distinct();
-                        foreach (var id in ids)
-                        {
-                            if (!_userNameCache.ContainsKey(id))
-                                await GetUserNameByIdAsync(id);
-                        }
-                    }
-
+                    var body = await resp.Content.ReadAsStringAsync();
+                    Console.WriteLine($"[ChatService.LoadChatHistoryAsync] GET {url} -> {resp.StatusCode}. Body(первые 200): {body.Substring(0, Math.Min(200, body.Length))}");
                     return result;
                 }
 
-                if (lastResp != null)
-                    Console.WriteLine($"[ChatService.LoadChatHistoryAsync] Не удалось загрузить историю чата {chatId}. Последний статус: {lastResp.StatusCode}");
+                var responseContent = await resp.Content.ReadAsStringAsync();
+                var messagesResponse = JsonSerializer.Deserialize<MessagesResponse>(responseContent);
+                if (messagesResponse?.Messages != null)
+                {
+                    result = messagesResponse.Messages.OrderBy(m => m.CreatedAt).ToList();
+                    var ids = result.Where(m => m.SenderId != _currentUserId).Select(m => m.SenderId).Distinct();
+                    foreach (var id in ids)
+                    {
+                        if (!_userNameCache.ContainsKey(id))
+                            await GetUserNameByIdAsync(id);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -470,111 +444,14 @@ namespace Sup.Services
             if (chatId == 0 || string.IsNullOrWhiteSpace(content))
                 return null;
 
-            var payload = new
-            {
-                chat_id = chatId,
-                sender_id = _currentUserId,
-                content = content
-            };
-
-            var json = JsonSerializer.Serialize(payload);
-
-            // Пробуем несколько вариантов эндпоинтов — на разных сборках backend они различаются.
-            var urls = new[]
-            {
-                $"{_messageServiceBaseUrl}/messages/{chatId}?user_id={_currentUserId}",
-                $"{_messageServiceBaseUrl}/messages/{chatId}",
-                $"{_messageServiceBaseUrl}/messages",
-                $"{_messageServiceBaseUrl}/message",
-                $"{_messageServiceBaseUrl}/send",
-                $"{_messageServiceBaseUrl}/chat/{chatId}/messages",
-                $"{_messageServiceBaseUrl}/chat/{chatId}/message",
-            };
-
-            foreach (var url in urls)
-            {
-                try
-                {
-                    var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
-                    var resp = await _httpClient.PostAsync(url, httpContent);
-                    if (!resp.IsSuccessStatusCode)
-                    {
-                        Console.WriteLine($"[ChatService.SendMessageAsync] POST {url} -> {resp.StatusCode}");
-                        continue;
-                    }
-
-                    var respJson = await resp.Content.ReadAsStringAsync();
-                    if (string.IsNullOrWhiteSpace(respJson))
-                    {
-                        Console.WriteLine($"[ChatService.SendMessageAsync] POST {url} -> OK, но пустой ответ");
-                        return new MessageDto
-                        {
-                            Id = 0,
-                            ChatId = chatId,
-                            SenderId = _currentUserId,
-                            Content = content,
-                            CreatedAt = DateTime.Now
-                        };
-                    }
-
-                    // Вариант 1: сервер вернул MessageDto напрямую
-                    try
-                    {
-                        var msg = JsonSerializer.Deserialize<MessageDto>(respJson);
-                        if (msg != null && !string.IsNullOrWhiteSpace(msg.Content))
-                            return msg;
-                    }
-                    catch { }
-
-                    // Вариант 2: сервер вернул объект-обёртку
-                    try
-                    {
-                        using var doc = JsonDocument.Parse(respJson);
-                        var root = doc.RootElement;
-
-                        if (root.TryGetProperty("message", out var messageElem))
-                        {
-                            var msg = JsonSerializer.Deserialize<MessageDto>(messageElem.GetRawText());
-                            if (msg != null && !string.IsNullOrWhiteSpace(msg.Content))
-                                return msg;
-                        }
-
-                        if (root.TryGetProperty("id", out _))
-                        {
-                            var msg = JsonSerializer.Deserialize<MessageDto>(root.GetRawText());
-                            if (msg != null && !string.IsNullOrWhiteSpace(msg.Content))
-                                return msg;
-                        }
-                    }
-                    catch { }
-
-                    // Если формат ответа неизвестен, хотя бы считаем, что сообщение сохранено.
-                    Console.WriteLine($"[ChatService.SendMessageAsync] POST {url} -> OK (неизвестный формат ответа)");
-                    return new MessageDto
-                    {
-                        Id = 0,
-                        ChatId = chatId,
-                        SenderId = _currentUserId,
-                        Content = content,
-                        CreatedAt = DateTime.Now
-                    };
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[ChatService.SendMessageAsync] Исключение при POST {url}: {ex.Message}");
-                }
-            }
-
+            Console.WriteLine("[ChatService.SendMessageAsync] В актуальном Swagger message-service REST-эндпоинт отправки сообщения не опубликован, используем WebSocket fallback");
             return null;
         }
 
         public async Task<bool> PollForChatListChangesAsync()
         {
             if (_currentUserId == 0) return false;
-            var request = new { user_id = _currentUserId };
-            var json = JsonSerializer.Serialize(request);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync($"{_messageServiceBaseUrl}/chat/user", content);
+            var response = await SendWithUserHeaderAsync(HttpMethod.Get, $"{_messageServiceBaseUrl}/chats");
             if (!response.IsSuccessStatusCode) return false;
             var responseContent = await response.Content.ReadAsStringAsync();
             var chatsResponse = JsonSerializer.Deserialize<GetUserChatsResponse>(responseContent);
@@ -590,6 +467,14 @@ namespace Sup.Services
                 return true;
             }
             return false;
+        }
+
+        private async Task<HttpResponseMessage> SendWithUserHeaderAsync(HttpMethod method, string url, HttpContent? content = null)
+        {
+            var request = new HttpRequestMessage(method, url);
+            request.Headers.TryAddWithoutValidation("X-Auth-User-ID", _currentUserId.ToString());
+            request.Content = content;
+            return await _httpClient.SendAsync(request);
         }
     }
 }

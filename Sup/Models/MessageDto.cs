@@ -8,6 +8,12 @@ namespace Sup.Models
         [JsonPropertyName("id")]
         public uint Id { get; set; }
 
+        [JsonPropertyName("message_id")]
+        public uint MessageId
+        {
+            set => Id = value;
+        }
+
         [JsonPropertyName("content")]
         public string Content { get; set; } = string.Empty;
 

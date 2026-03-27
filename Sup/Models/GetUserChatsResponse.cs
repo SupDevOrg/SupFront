@@ -48,12 +48,19 @@ namespace Sup.Models
                             chatInfo.Id = idElem.GetUInt32();
                         if (root.TryGetProperty("name", out var nameElem))
                             chatInfo.Name = nameElem.GetString() ?? "";
+                        if (string.IsNullOrEmpty(chatInfo.Name) && root.TryGetProperty("chat_name", out var chatNameElem))
+                            chatInfo.Name = chatNameElem.GetString() ?? "";
                         if (root.TryGetProperty("last_message", out var msgElem))
                             chatInfo.LastMessage = msgElem.GetString() ?? "";
                         if (root.TryGetProperty("last_message_time", out var timeElem))
                         {
                             if (DateTime.TryParse(timeElem.GetString(), out var parsedTime))
                                 chatInfo.LastMessageTime = parsedTime;
+                        }
+                        if (chatInfo.LastMessageTime == default && root.TryGetProperty("created_at", out var createdElem))
+                        {
+                            if (DateTime.TryParse(createdElem.GetString(), out var createdAt))
+                                chatInfo.LastMessageTime = createdAt;
                         }
 
                         result.Add(chatInfo);
