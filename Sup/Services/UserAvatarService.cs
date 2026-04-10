@@ -128,7 +128,7 @@ namespace Sup.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[UserAvatarService.GetAvatarUploadUrlAsync] ❌ Исключение: {ex.Message}");
+                Console.WriteLine($"[UserAvatarService.GetAvatarUploadUrlAsync] Исключение: {ex.Message}");
                 return new AvatarUploadUrlResponse();
             }
         }

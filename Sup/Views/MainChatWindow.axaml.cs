@@ -21,6 +21,8 @@ namespace Sup.Views
         private readonly IWebSocketService _webSocketService;
         private readonly IFriendService _friendService;
         private readonly IUserAvatarService _userAvatarService;
+        private readonly ISignalingService _signalingService;
+        private readonly IVoiceCallService _voiceCallService;
 
         private uint _currentUserId = 0;
         private uint? _currentChatId = null;
@@ -39,6 +41,12 @@ namespace Sup.Views
         private bool _isAvatarPendingConfirmation = false;
         private byte[] _resizedAvatarData = Array.Empty<byte>();
 
+        // Индексы выбранных аудиоустройств из настроек
+        private int _selectedMicIndex = -1;
+        private int _selectedSpeakerIndex = -1;
+        // SDP входящего звонка, ожидающего принятия
+        private string _pendingOfferSdp = string.Empty;
+
         public MainChatWindow() : this("user")
         {
         }
@@ -46,6 +54,9 @@ namespace Sup.Views
         public MainChatWindow(string username)
         {
             InitializeComponent();
+
+            _signalingService = new SignalingService();
+            _voiceCallService = new VoiceCallService();
 
             try
             {
@@ -68,7 +79,7 @@ namespace Sup.Views
             SetupGlobalButtonHandlers();
             ResetTabsState();
             Console.WriteLine($"[MainChatWindow] Инициализация для пользователя: {username}");
-            
+
             // Инициализируем в фоне
             _ = InitializeAsync();
 
@@ -77,6 +88,13 @@ namespace Sup.Views
             _chatListTimer.AutoReset = true;
             _chatListTimer.Start();
             Console.WriteLine("[MainChatWindow] Таймер полинга чатов запущен");
+
+            this.Closed += (s, e) =>
+            {
+                _chatListTimer?.Stop();
+                _signalingService.Disconnect();
+                _voiceCallService.Dispose();
+            };
         }
 
         private void SetupEventHandlers()
@@ -96,12 +114,33 @@ namespace Sup.Views
             PrevPageButton.Click += OnPrevPageClick;
             NextPageButton.Click += OnNextPageClick;
             SendMessageButton.Click += OnSendMessageClicked;
+            CallButton.Click += OnCallButtonClicked;
             UsersListBox.SelectionChanged += OnChatSelected;
 
             FriendsTabButton2.Click += OnFriendsTabButton2Clicked;
             RequestsTabButton.Click += OnRequestsTabButtonClicked;
 
             _webSocketService.OnMessageReceived += OnWebSocketMessageReceived;
+
+            AcceptCallButton.Click += OnAcceptCallClicked;
+            RejectCallButton.Click += OnRejectCallClicked;
+            EndCallButton.Click += OnEndCallClicked;
+
+            MicrophoneComboBox.SelectionChanged += (s, e) => _selectedMicIndex = MicrophoneComboBox.SelectedIndex;
+            AudioOutputComboBox.SelectionChanged += (s, e) => _selectedSpeakerIndex = AudioOutputComboBox.SelectedIndex;
+
+            _signalingService.OnOfferReceived += OnSignalingOfferReceived;
+            _signalingService.OnAnswerReceived += OnSignalingAnswerReceived;
+            _signalingService.OnIceCandidateReceived += OnSignalingIceCandidateReceived;
+            _signalingService.OnPeerLeft += OnSignalingPeerLeft;
+            _signalingService.OnAudioReceived += OnSignalingRelayAudioReceived;
+
+            _voiceCallService.OnOfferCreated += OnVoiceCallOfferCreated;
+            _voiceCallService.OnAnswerCreated += OnVoiceCallAnswerCreated;
+            _voiceCallService.OnIceCandidateReady += OnVoiceCallIceCandidateReady;
+            _voiceCallService.OnCallConnected += OnVoiceCallConnected;
+            _voiceCallService.OnCallEnded += OnVoiceCallEnded;
+            _voiceCallService.OnRelayAudioReady += OnVoiceRelayAudioReady;
         }
 
         private void SetupGlobalButtonHandlers()
@@ -476,6 +515,10 @@ namespace Sup.Views
                         Console.WriteLine($"[OnChatSelected] Открываем WebSocket для чата {selectedChat.ChatId} с пользователем {otherUserId}");
                         await _webSocketService.OpenAsync(selectedChat.ChatId, _currentUserId, otherUserId);
                     }
+
+                    // Подключаемся к сигнальной комнате для получения входящих звонков
+                    if (!_voiceCallService.IsCallActive)
+                        _ = ConnectToSignalingRoomAsync(selectedChat.ChatId);
                 }
             }
         }
@@ -624,6 +667,37 @@ namespace Sup.Views
             catch (Exception ex)
             {
                 Console.WriteLine($"[OnSendMessageClicked] Ошибка: {ex.Message}");
+            }
+        }
+
+        private async void OnCallButtonClicked(object? sender, RoutedEventArgs e)
+        {
+            if (_voiceCallService.IsCallActive)
+            {
+                await EndCallAsync();
+                return;
+            }
+
+            if (!_currentChatId.HasValue || _pendingChats.ContainsKey(_currentChatId.Value))
+            {
+                Console.WriteLine("[OnCallButtonClicked] Нет активного чата для звонка");
+                return;
+            }
+
+            Console.WriteLine($"[OnCallButtonClicked] Инициируем звонок: {_currentChatUserName} (чат {_currentChatId})");
+            var roomId = $"chat-{_currentChatId.Value}";
+            await _signalingService.ConnectAsync(roomId, _currentUserId.ToString());
+            var started = await _voiceCallService.InitiateCallAsync(_selectedMicIndex, _selectedSpeakerIndex);
+            if (started)
+            {
+                UpdateCallUI(true);
+                CallStatusText.Text = $"📞 Звонок: {_currentChatUserName}...";
+            }
+            else
+            {
+                Console.WriteLine("[OnCallButtonClicked] InitiateCallAsync вернул false — звонок не начат");
+                await _signalingService.LeaveAsync();
+                _signalingService.Disconnect();
             }
         }
 
@@ -1731,6 +1805,167 @@ namespace Sup.Views
                         break;
                 }
             }
+        }
+    }
+
+    // ───────────────────────────── Сигнализация и звонки ─────────────────────────────
+
+    partial class MainChatWindow
+    {
+        // Подключается к сигнальной комнате пассивно (для приёма входящих звонков)
+        private async Task ConnectToSignalingRoomAsync(uint chatId)
+        {
+            try
+            {
+                var roomId = $"chat-{chatId}";
+                Console.WriteLine($"[ConnectToSignalingRoomAsync] Подключаемся к комнате {roomId}");
+                await _signalingService.ConnectAsync(roomId, _currentUserId.ToString());
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ConnectToSignalingRoomAsync] Ошибка: {ex.Message}");
+            }
+        }
+
+        // Принять входящий звонок
+        private async void OnAcceptCallClicked(object? sender, RoutedEventArgs e)
+        {
+            Console.WriteLine("[OnAcceptCallClicked] Принимаем звонок");
+            IncomingCallOverlay.IsVisible = false;
+            UpdateCallUI(true);
+            CallStatusText.Text = $"📞 Звонок: {_currentChatUserName}";
+            await _voiceCallService.HandleOfferAsync(_pendingOfferSdp, _selectedMicIndex, _selectedSpeakerIndex);
+            _pendingOfferSdp = string.Empty;
+        }
+
+        // Отклонить входящий звонок
+        private async void OnRejectCallClicked(object? sender, RoutedEventArgs e)
+        {
+            Console.WriteLine("[OnRejectCallClicked] Отклоняем звонок");
+            IncomingCallOverlay.IsVisible = false;
+            _pendingOfferSdp = string.Empty;
+            await _signalingService.LeaveAsync();
+            _signalingService.Disconnect();
+            // Переподключаемся пассивно для приёма новых входящих звонков
+            if (_currentChatId.HasValue && !_pendingChats.ContainsKey(_currentChatId.Value))
+                _ = ConnectToSignalingRoomAsync(_currentChatId.Value);
+        }
+
+        // Завершить активный звонок
+        private async void OnEndCallClicked(object? sender, RoutedEventArgs e)
+        {
+            await EndCallAsync();
+        }
+
+        // Общая логика завершения звонка
+        private async Task EndCallAsync()
+        {
+            Console.WriteLine("[EndCallAsync] Завершаем звонок");
+            await _signalingService.LeaveAsync();
+            // Отключаемся сразу, чтобы не получать эхо-ответные leave и не создавать бесконечный цикл
+            _signalingService.Disconnect();
+            await _voiceCallService.HangUpAsync();
+            UpdateCallUI(false);
+            // Переподключаемся пассивно для приёма новых входящих звонков
+            if (_currentChatId.HasValue && !_pendingChats.ContainsKey(_currentChatId.Value))
+                _ = ConnectToSignalingRoomAsync(_currentChatId.Value);
+        }
+
+        // Обновляет видимость панели звонка и иконку кнопки
+        private void UpdateCallUI(bool callActive)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                ActiveCallBar.IsVisible = callActive;
+                CallButton.Content = callActive ? "📵" : "📞";
+            });
+        }
+
+        // ───── Обработчики событий сигнального сервиса ─────
+
+        // Получен входящий offer — показываем оверлей
+        private void OnSignalingOfferReceived(object? sender, string sdp)
+        {
+            Console.WriteLine("[OnSignalingOfferReceived] Входящий звонок");
+            _pendingOfferSdp = sdp;
+            Dispatcher.UIThread.Post(() =>
+            {
+                IncomingCallUserName.Text = _currentChatUserName;
+                IncomingCallOverlay.IsVisible = true;
+            });
+        }
+
+        // Получен answer — передаём в VoiceCallService
+        private async void OnSignalingAnswerReceived(object? sender, string sdp)
+        {
+            Console.WriteLine("[OnSignalingAnswerReceived] Получен answer");
+            await _voiceCallService.HandleAnswerAsync(sdp);
+        }
+
+        // Получен ICE-кандидат — передаём в VoiceCallService
+        private async void OnSignalingIceCandidateReceived(object? sender, SignalingCandidateEventArgs e)
+        {
+            await _voiceCallService.HandleIceCandidateAsync(e.Candidate, e.SdpMid, e.SdpMLineIndex);
+        }
+
+        // Собеседник покинул комнату — завершаем звонок
+        private async void OnSignalingPeerLeft(object? sender, EventArgs e)
+        {
+            Console.WriteLine("[OnSignalingPeerLeft] Собеседник покинул комнату");
+            if (!_voiceCallService.IsCallActive)
+            {
+                Console.WriteLine("[OnSignalingPeerLeft] Звонок не активен, пропуск");
+                return;
+            }
+            await EndCallAsync();
+        }
+
+        // ───── Обработчики событий VoiceCallService ─────
+
+        // Offer создан — отправляем через сигналинг
+        private async void OnVoiceCallOfferCreated(object? sender, string sdp)
+        {
+            Console.WriteLine("[OnVoiceCallOfferCreated] Отправляем offer");
+            await _signalingService.SendOfferAsync(sdp);
+        }
+
+        // Answer создан — отправляем через сигналинг
+        private async void OnVoiceCallAnswerCreated(object? sender, string sdp)
+        {
+            Console.WriteLine("[OnVoiceCallAnswerCreated] Отправляем answer");
+            await _signalingService.SendAnswerAsync(sdp);
+        }
+
+        // ICE-кандидат готов — отправляем через сигналинг
+        private async void OnVoiceCallIceCandidateReady(object? sender, SignalingCandidateEventArgs e)
+        {
+            await _signalingService.SendIceCandidateAsync(e.Candidate, e.SdpMid, e.SdpMLineIndex);
+        }
+
+        // Звонок установлен — обновляем статус
+        private void OnVoiceCallConnected(object? sender, EventArgs e)
+        {
+            Console.WriteLine("[OnVoiceCallConnected] Звонок установлен");
+            Dispatcher.UIThread.Post(() => CallStatusText.Text = $"📞 {_currentChatUserName}");
+        }
+
+        // Звонок завершён со стороны сервиса — обновляем UI
+        private async void OnVoiceCallEnded(object? sender, EventArgs e)
+        {
+            Console.WriteLine("[OnVoiceCallEnded] Звонок завершён");
+            await Dispatcher.UIThread.InvokeAsync(() => UpdateCallUI(false));
+        }
+
+        // Аудио через WebSocket-ретрансляцию: отправка
+        private async void OnVoiceRelayAudioReady(object? sender, byte[] encoded)
+        {
+            await _signalingService.SendAudioAsync(encoded);
+        }
+
+        // Аудио через WebSocket-ретрансляцию: приём
+        private void OnSignalingRelayAudioReceived(object? sender, byte[] data)
+        {
+            _voiceCallService.ReceiveRelayAudio(data);
         }
     }
 }
