@@ -1567,6 +1567,10 @@ namespace Sup.Views
 
         private async void OnFriendBorderPointerPressed(object? sender, PointerPressedEventArgs e)
         {
+            ChatPanel.IsVisible = true;
+            GlobalSearchPanel.IsVisible = false;
+            FriendsPanel.IsVisible = false;
+
             if (sender is not Border border) return;
             
             if (border.DataContext is not FriendListItemDto friend) return;
