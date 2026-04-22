@@ -116,7 +116,6 @@ namespace Sup.Views
             SearchTabButton.Click += OnSearchTabClicked;
             FriendsTabButton.Click += OnFriendsTabClicked;
             CreateGroupButton.Click += OnCreateGroupButtonClicked;
-            BackFromFriendsButton.Click += OnBackFromFriendsClicked;
             SearchGlobalTextBox.KeyUp += async (s, e) => await OnSearchUsersAsync();
             GlobalUsersListBox.DoubleTapped += OnGlobalUserSelected;
             SettingsButton.Click += OnSettingsClicked;
@@ -1056,12 +1055,6 @@ namespace Sup.Views
             await LoadFriendsAsync();
         }
 
-        private void OnBackFromFriendsClicked(object? sender, RoutedEventArgs e)
-        {
-            Console.WriteLine("[OnBackFromFriendsClicked] Возврат к чатам из друзей");
-            ShowChatPanel();
-        }
-
         private async void OnGlobalUserSelected(object? sender, RoutedEventArgs e)
         {
             if (GlobalUsersListBox.SelectedItem is SearchResultItemDto item)
@@ -1262,6 +1255,20 @@ namespace Sup.Views
             AvatarPanel.IsVisible = false;
             MainPanels.IsVisible = true;
             LeftSearchPanel.IsVisible = true;
+
+            // Если есть открытый чат, вернуться в него
+            if (_currentChatId.HasValue && _currentChatId.Value > 0)
+            {
+                Console.WriteLine($"[OnBackFromSettingsClicked] Возврат к чату {_currentChatId}");
+                ShowChatPanel();
+            }
+            else
+            {
+                // Иначе открыть друзей
+                Console.WriteLine("[OnBackFromSettingsClicked] Нет открытого чата, открываем друзей");
+                ShowFriendsPanel();
+                OnFriendsTabButton2Clicked(FriendsTabButton2, new RoutedEventArgs());
+            }
         }
 
         private async void OnLogoutClicked(object? sender, RoutedEventArgs e)
