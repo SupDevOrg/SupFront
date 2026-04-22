@@ -1321,26 +1321,15 @@ namespace Sup.Views
 
                 using (var httpClient = new System.Net.Http.HttpClient())
                 {
-                    foreach (var user in users)
+                    var tasks = users.Select(async user =>
                     {
                         if (string.IsNullOrEmpty(user.AvatarUrl))
-                            continue;
-
-                        try
-                        {
-                            var imageData = await httpClient.GetByteArrayAsync(user.AvatarUrl);
-                            var bitmap = new Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(imageData));
-
-                            await Dispatcher.UIThread.InvokeAsync(() =>
-                            {
-                                user.AvatarBitmap = bitmap;
-                            });
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"[MainChatWindow.LoadSearchUserAvatarsAsync] Ошибка загрузки аватарки {user.Username}: {ex.Message}");
-                        }
-                    }
+                            return;
+                        var imageData = await httpClient.GetByteArrayAsync(user.AvatarUrl);
+                        var bitmap = new Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(imageData));
+                        await Dispatcher.UIThread.InvokeAsync(() => user.AvatarBitmap = bitmap);
+                    });
+                    await Task.WhenAll(tasks);
                 }
             }
             catch (Exception ex)
@@ -1509,25 +1498,14 @@ namespace Sup.Views
                 Console.WriteLine($"[LoadFriendsAvatarsAsync] Загружаем аватарки для {friends.Count} друзей");
                 using (var httpClient = new System.Net.Http.HttpClient())
                 {
-                    foreach (var friend in friends)
+                    var tasks = friends.Select(async friend =>
                     {
-                        if (string.IsNullOrEmpty(friend.AvatarUrl))
-                            continue;
-
-                        try
-                        {
-                            var imageData = await httpClient.GetByteArrayAsync(friend.AvatarUrl);
-                            var bitmap = new Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(imageData));
-                            await Dispatcher.UIThread.InvokeAsync(() =>
-                            {
-                                friend.AvatarBitmap = bitmap;
-                            });
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"[LoadFriendsAvatarsAsync] Ошибка загрузки аватарки {friend.Username}: {ex.Message}");
-                        }
-                    }
+                        if (string.IsNullOrEmpty(friend.AvatarUrl)) return;
+                        var imageData = await httpClient.GetByteArrayAsync(friend.AvatarUrl);
+                        var bitmap = new Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(imageData));
+                        await Dispatcher.UIThread.InvokeAsync(() => friend.AvatarBitmap = bitmap);
+                    });
+                    await Task.WhenAll(tasks);
                 }
                 Console.WriteLine($"[LoadFriendsAvatarsAsync] Загрузка аватарок завершена");
             }
