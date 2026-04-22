@@ -1,14 +1,15 @@
-using System;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Media;
+using Avalonia.Threading;
+using Sup.ForTokens;
+using Sup.Views;
+using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Avalonia.Media;
 using System.Text.Json.Serialization;
-using Sup.ForTokens;
-using Sup.Views;
 using System.Threading.Tasks;
 
 namespace Sup
@@ -82,11 +83,9 @@ namespace Sup
             var login = LoginTextBox.Text;
             var password = PasswordTextBox.Text;
 
-            // Очищаем сообщение
             StatusMessage.Text = string.Empty;
             StatusMessage.Foreground = Brushes.Transparent;
 
-            // Проверка полей
             if (string.IsNullOrWhiteSpace(login) || string.IsNullOrWhiteSpace(password))
             {
                 StatusMessage.Text = "Введите логин и пароль";
@@ -96,40 +95,33 @@ namespace Sup
 
             try
             {
-                // Отключаем кнопку входа
                 LoginButton.IsEnabled = false;
                 StatusMessage.Text = "Подключение...";
                 StatusMessage.Foreground = Brushes.Blue;
 
-                // Создаём http клиент
                 using var client = new HttpClient();
-                // URL вашего backend API
                 var url = $"{App.ApiBaseUrl}user/login";
-                // Формируем json-запрос
                 var payload = new { username = login, password = password };
                 var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-                
+
                 var response = await client.PostAsync(url, content);
 
                 if (response.IsSuccessStatusCode)
                 {
-                    // Читаем ответ и получаем токены
                     var responseContent = await response.Content.ReadAsStringAsync();
                     var authResponse = JsonSerializer.Deserialize<AuthResponse>(responseContent);
 
                     if (authResponse != null && !string.IsNullOrEmpty(authResponse.accessToken))
                     {
-                        // СОХРАНЯЕМ ТОКЕНЫ В КЭШ 
                         await TokenManager.SaveTokensAsync(authResponse.accessToken, authResponse.refreshToken);
 
-                        StatusMessage.Text = "Успешный вход, загружаем чаты...";
+                        StatusMessage.Text = "Успешный вход, загружаем данные...";
                         StatusMessage.Foreground = Brushes.Green;
-                        
+
                         Console.WriteLine($"[OnLoginClicked] Успешный вход для пользователя: {login}");
-                        
-                        var chatWindow = new MainChatWindow(login);
-                        chatWindow.Show();
-                        this.Close();
+
+                        // Закрываем текущее окно входа и запускаем загрузку
+                        await ShowLoadingAndChatWindow(login);
                     }
                     else
                     {
@@ -140,7 +132,6 @@ namespace Sup
                 }
                 else
                 {
-                    // Ошибка авторизации, читаем сообщение сервера
                     var errorMsg = await response.Content.ReadAsStringAsync();
                     StatusMessage.Text = $"Ошибка: {errorMsg}";
                     StatusMessage.Foreground = Brushes.Red;
@@ -163,6 +154,48 @@ namespace Sup
             {
                 LoginButton.IsEnabled = true;
             }
+        }
+
+        // Новый метод для показа загрузки и запуска главного окна
+        private async Task ShowLoadingAndChatWindow(string username)
+        {
+            // Показываем окно загрузки
+            var loadingWindow = new LoadingWindow();
+            loadingWindow.Show();
+
+            // Скрываем окно входа, чтобы не мешало
+            this.Hide();
+
+            // Создаём главное окно чата, но НЕ показываем его
+            var chatWindow = new MainChatWindow(username);
+
+            // Подписываемся на завершение загрузки
+            chatWindow.LoadingCompleted += (s, args) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    loadingWindow.Close();   // Закрываем загрузку
+                    chatWindow.Show();       // Показываем главное окно
+                    this.Close();            // Закрываем окно входа (уже скрыто)
+                });
+            };
+
+            // Таймаут 15 секунд на случай зависания
+            _ = Task.Delay(TimeSpan.FromSeconds(15)).ContinueWith(t =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (loadingWindow.IsVisible)
+                    {
+                        loadingWindow.Close();
+                        chatWindow.Close();
+                        this.Show();               // Показываем снова окно входа
+                        StatusMessage.Text = "Ошибка загрузки данных. Попробуйте снова.";
+                        StatusMessage.Foreground = Brushes.Red;
+                        LoginButton.IsEnabled = true;
+                    }
+                });
+            });
         }
 
         // Обработчик для кнопки "Зарегистрироваться"

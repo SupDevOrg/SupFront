@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Sup.Views.LoadingWindow"
+        Title=""
+        Width="200"
+        Height="200"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="None"
+        CanResize="False"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent">
+
+  <Border Margin="8"
+          Background="#FF0B1120"
+          CornerRadius="8">
+
+    <Grid>
+      <Grid.Background>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+          <GradientStop Color="#FF0B1120" Offset="0"/>
+          <GradientStop Color="#FF111C33" Offset="0.5"/>
+          <GradientStop Color="#FF172038" Offset="1"/>
+        </LinearGradientBrush>
+      </Grid.Background>
+
+      <StackPanel HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Spacing="18">
+
+        <!-- Контейнер фиксированного размера -->
+        <Grid Width="56" Height="56"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center">
+
+          <!-- Фоновое кольцо (светлое) -->
+          <Ellipse Width="56" Height="56"
+                   Stroke="#1A1A1B"
+                   StrokeThickness="4"
+                   Fill="Transparent"/>
+
+          <!-- Вращающаяся дуга 270° через StrokeDashArray -->
+          <!-- Окружность (r=24): 2π×24 ≈ 150.8; 270° = 113.1, зазор = 37.7 -->
+          <Ellipse Name="SpinnerArc"
+                   Width="56" Height="56"
+                   Stroke="#5A9CFF"
+                   StrokeThickness="4"
+                   Fill="Transparent"
+                   StrokeDashArray="30.6,10.2"
+                   RenderTransformOrigin="0.5,0.5">
+            <Ellipse.RenderTransform>
+              <RotateTransform Angle="0"/>
+            </Ellipse.RenderTransform>
+          </Ellipse>
+        </Grid>
+
+        <TextBlock Text="Загрузка..."
+                   Foreground="#A0A0B0"
+                   FontSize="13"
+                   HorizontalAlignment="Center"/>
+
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

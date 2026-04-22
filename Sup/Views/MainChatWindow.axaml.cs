@@ -24,6 +24,11 @@ namespace Sup.Views
         private readonly ISignalingService _signalingService;
         private readonly IVoiceCallService _voiceCallService;
 
+        /// <summary>
+        /// Срабатывает когда первоначальная загрузка данных (чаты, профиль) завершена.
+        /// </summary>
+        public event EventHandler? LoadingCompleted;
+
         private uint _currentUserId = 0;
         private uint? _currentChatId = null;
         private string _currentChatUserName = string.Empty;
@@ -413,20 +418,33 @@ namespace Sup.Views
                     Console.WriteLine($"[InitializeAsync] Ошибка загрузки чатов: {ex.Message}");
                 }
 
-                // Загружаем аватарку пользователя
+                // Загружаем аватарку пользователя в фоне, не дожидаясь
                 try
                 {
                     Console.WriteLine($"[InitializeAsync] Загружаем аватарку пользователя");
-                    await LoadUserAvatarAsync();
+                    _ = LoadUserAvatarAsync();
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[InitializeAsync] Ошибка загрузки аватарки: {ex.Message}");
                 }
+
+                // Сигнализируем что основная загрузка завершена
+                await Dispatcher.UIThread.InvokeAsync(() => LoadingCompleted?.Invoke(this, EventArgs.Empty));
+
+                // Открываем панель друзей и выбираем вкладку "Друзья"
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    ShowFriendsPanel();
+                    OnFriendsTabButton2Clicked(FriendsTabButton2, new RoutedEventArgs());
+                });
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[InitializeAsync] Неожиданная ошибка: {ex.Message}");
+
+                // Даже при ошибке снимаем блокировку загрузочного окна
+                await Dispatcher.UIThread.InvokeAsync(() => LoadingCompleted?.Invoke(this, EventArgs.Empty));
             }
         }
 
