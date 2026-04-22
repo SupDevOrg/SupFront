@@ -503,6 +503,10 @@ namespace Sup.Views
 
         private async void OnChatSelected(object? sender, SelectionChangedEventArgs e)
         {
+            ChatPanel.IsVisible = true;
+            GlobalSearchPanel.IsVisible = false;
+            FriendsPanel.IsVisible = false;
+
             await RemoveEmptyPendingChatIfCurrentAsync();
 
             if (UsersListBox.SelectedItem is ChatListItem selectedChat && selectedChat.ChatId != 0)
@@ -1567,9 +1571,6 @@ namespace Sup.Views
 
         private async void OnFriendBorderPointerPressed(object? sender, PointerPressedEventArgs e)
         {
-            ChatPanel.IsVisible = true;
-            GlobalSearchPanel.IsVisible = false;
-            FriendsPanel.IsVisible = false;
 
             if (sender is not Border border) return;
             
