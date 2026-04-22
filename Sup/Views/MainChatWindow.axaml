@@ -9,32 +9,31 @@
         Title="Sup"
         MinWidth="1180"
         MinHeight="700">
-        
+
   <Window.Resources>
-    <!-- Только простые ресурсы и конвертеры! -->
     <local:HorizontalAlignmentConverter x:Key="HorizontalAlignmentConverter"/>
     <local:MessageBackgroundConverter x:Key="MessageBackgroundConverter"/>
     <local:MessageTextColorConverter x:Key="MessageTextColorConverter"/>
   </Window.Resources>
-  
+
   <Window.Styles>
     <Style Selector="TextBlock.title">
       <Setter Property="FontSize" Value="20"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
     </Style>
-    
+
     <Style Selector="TextBlock.muted">
       <Setter Property="FontSize" Value="14"/>
       <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
     </Style>
-    
+
     <Style Selector="TextBlock.caption">
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
     </Style>
-    
+
     <Style Selector="Button">
       <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
       <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
@@ -44,17 +43,17 @@
       <Setter Property="Padding" Value="12,8"/>
       <Setter Property="FontSize" Value="14"/>
     </Style>
-    
+
     <Style Selector="Button:pointerover">
       <Setter Property="Background" Value="{StaticResource SurfaceAltBrush}"/>
     </Style>
-    
+
     <Style Selector="Button.outlined">
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="BorderBrush" Value="{StaticResource TextSecondaryBrush}"/>
       <Setter Property="BorderThickness" Value="1"/>
     </Style>
-    
+
     <Style Selector="TextBox">
       <Setter Property="Background" Value="{StaticResource SurfaceAltBrush}"/>
       <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
@@ -65,10 +64,9 @@
       <Setter Property="FontSize" Value="14"/>
     </Style>
   </Window.Styles>
-  
+
   <Grid Background="{StaticResource AppBackgroundBrush}">
       <Grid ColumnDefinitions="1*,3*">
-        <!-- Левый блок: список диалогов, поиск, статус пользователя -->
         <Border Grid.Column="0"
                 Margin="0"
                 Background="{StaticResource SurfaceBrush}"
@@ -96,6 +94,10 @@
                 <StackPanel Spacing="4">
                   <TextBlock Text="Диалоги" Classes="title"/>
                 </StackPanel>
+                <Button x:Name="CreateGroupButton"
+                        Content="Создать группу"
+                        Classes="outlined"
+                        HorizontalAlignment="Stretch"/>
 
                 <TextBox x:Name="DialogsSearchTextBox" Watermark="Поиск среди ваших диалогов..."/>
               </StackPanel>
@@ -106,7 +108,7 @@
                     CornerRadius="{StaticResource ControlCornerRadius}"
                     Padding="12,12,12,20"
                     Margin="0,20,0,24">
-              <ListBox x:Name="UsersListBox" 
+              <ListBox x:Name="UsersListBox"
                        MinHeight="320"
                        ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <ListBox.ItemContainerTheme>
@@ -130,10 +132,22 @@
                             Margin="0,2"
                             Cursor="Hand">
                       <StackPanel Spacing="4">
-                        <TextBlock Text="{Binding DisplayName}"
-                                   FontWeight="SemiBold"
-                                   FontSize="16"
-                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                          <TextBlock Text="{Binding DisplayName}"
+                                     FontWeight="SemiBold"
+                                     FontSize="16"
+                                     Foreground="{StaticResource TextPrimaryBrush}"/>
+                          <Border Grid.Column="1"
+                                  Background="{StaticResource SurfaceBrush}"
+                                  CornerRadius="999"
+                                  Padding="8,2"
+                                  IsVisible="{Binding IsGroup}">
+                            <TextBlock Text="GROUP"
+                                       FontSize="10"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                          </Border>
+                        </Grid>
                         <TextBlock Text="{Binding LastMessage}"
                                    TextWrapping="Wrap"
                                    Opacity="0.8"
@@ -157,25 +171,21 @@
                     CornerRadius="{StaticResource ControlCornerRadius}"
                     Padding="20">
               <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center" ColumnSpacing="12">
-                <!-- Аватарка пользователя -->
                 <Border Grid.Column="0" Width="48" Height="48" Background="Black" CornerRadius="8" ClipToBounds="True">
                   <Image x:Name="UserAvatarImage" Stretch="UniformToFill"/>
                 </Border>
 
-                <!-- Имя и статус -->
                 <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Left" VerticalAlignment="Center">
                   <TextBlock x:Name="UserNameLabel" Text="user" FontSize="18" FontWeight="SemiBold"/>
                   <TextBlock Text="В сети" Classes="muted"/>
                 </StackPanel>
 
-                <!-- Кнопка настроек -->
                 <Button Grid.Column="2" x:Name="SettingsButton" Content="⚙" HorizontalAlignment="Right" Width="32" Height="32" Padding="0" FontSize="18" Background="Transparent" BorderThickness="0" Foreground="{StaticResource TextSecondaryBrush}"/>
               </Grid>
             </Border>
           </Grid>
         </Border>
 
-        <!-- Правый блок: основной чат / глобальный поиск / друзья -->
         <Border Grid.Column="1"
                 Margin="0"
                 Background="{StaticResource SurfaceBrush}"
@@ -184,7 +194,6 @@
           <Grid>
             <Grid x:Name="MainPanels" RowDefinitions="Auto,*,Auto">
               <Grid x:Name="ChatPanel" RowDefinitions="Auto,Auto,*,Auto" Grid.Row="0" Grid.RowSpan="3">
-                <!-- Строка активного звонка -->
                 <Border x:Name="ActiveCallBar"
                         Grid.Row="0"
                         IsVisible="False"
@@ -207,45 +216,60 @@
                   </Grid>
                 </Border>
                 <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14" Margin="0,0,0,20" VerticalAlignment="Center">
-                  <!-- Аватарка собеседника -->
                   <Border Grid.Column="0"
                           Width="44" Height="44"
                           Background="{StaticResource SurfaceAltBrush}"
                           CornerRadius="8"
                           ClipToBounds="True">
-                    <Image x:Name="ChatUserAvatarImage" Stretch="UniformToFill"/>
+                    <Grid>
+                      <Image x:Name="ChatUserAvatarImage" Stretch="UniformToFill"/>
+                      <TextBlock x:Name="ChatUserAvatarPlaceholder"
+                                 Text="GR"
+                                 IsVisible="False"
+                                 FontWeight="SemiBold"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </Grid>
                   </Border>
 
-                  <!-- Имя и подпись -->
                   <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                     <TextBlock x:Name="ChatUserName" Text="Имя пользователя" FontSize="22" FontWeight="SemiBold"/>
-                    <TextBlock Text="История ваших сообщений" Classes="muted"/>
+                    <TextBlock x:Name="ChatSubtitleText"
+                               Text="История ваших сообщений"
+                               Classes="muted"/>
                   </StackPanel>
 
-                  <!-- Кнопка звонка -->
-                  <Button Grid.Column="2"
-                          x:Name="CallButton"
-                          Content="📞"
-                          Width="42"
-                          Height="42"
-                          Padding="0"
-                          FontSize="20"
-                          VerticalAlignment="Center"
-                          HorizontalAlignment="Right"
-                          Background="Transparent"
-                          BorderThickness="0"
-                          ToolTip.Tip="Позвонить"
-                          Foreground="{StaticResource TextSecondaryBrush}"/>
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button x:Name="ManageGroupButton"
+                            Content="Участники"
+                            Classes="outlined"
+                            IsVisible="False"
+                            Padding="12,6"
+                            Height="36"/>
+                    <Button x:Name="CallButton"
+                            Content="📞"
+                            Width="42"
+                            Height="42"
+                            Padding="0"
+                            FontSize="20"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Right"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            ToolTip.Tip="Позвонить"
+                            Foreground="{StaticResource TextSecondaryBrush}"/>
+                  </StackPanel>
                 </Grid>
 
-                <Border Grid.Row="2" 
+                <Border Grid.Row="2"
                         Padding="12"
                         Background="{StaticResource SurfaceAltBrush}"
                         CornerRadius="{StaticResource ControlCornerRadius}">
                   <ScrollViewer Name="MessagesScrollViewer"
                                 VerticalScrollBarVisibility="Auto"
                                 HorizontalScrollBarVisibility="Disabled">
-                    <ListBox x:Name="MessagesListBox" 
+                    <ListBox x:Name="MessagesListBox"
                              BorderThickness="0"
                              Background="Transparent">
                       <ListBox.ItemContainerTheme>
@@ -290,18 +314,18 @@
                 </Border>
 
                 <Grid Grid.Row="3" ColumnDefinitions="*,Auto" Margin="0,20,0,0">
-                  <TextBox Grid.Column="0" 
-                           x:Name="MessageTextBox" 
+                  <TextBox Grid.Column="0"
+                           x:Name="MessageTextBox"
                            Watermark="Введите сообщение..." 
                            VerticalAlignment="Center"
                            AcceptsReturn="True"
                            TextWrapping="Wrap"
                            MinHeight="40"/>
-                  <Button Grid.Column="1" 
-                          x:Name="SendMessageButton" 
+                  <Button Grid.Column="1"
+                          x:Name="SendMessageButton"
                           Content="Отправить" 
-                          MinWidth="100" 
-                          Margin="12,0,0,0" 
+                          MinWidth="100"
+                          Margin="12,0,0,0"
                           VerticalAlignment="Center"
                           Height="40"/>
                 </Grid>
@@ -309,15 +333,16 @@
 
               <Grid x:Name="GlobalSearchPanel" RowDefinitions="Auto,Auto,*,Auto" Grid.Row="0" Grid.RowSpan="3" IsVisible="False">
                 <StackPanel Orientation="Horizontal" Spacing="12" Grid.Row="0" Margin="0,0,0,16">
+                  <Button x:Name="BackToChatButton" Content="Назад" Classes="outlined" Width="140"/>
                   <TextBlock Text="Глобальный поиск" Classes="title" VerticalAlignment="Center"/>
                 </StackPanel>
 
                 <TextBox x:Name="SearchGlobalTextBox" Watermark="Введите имя для поиска" Grid.Row="1" Margin="0,0,0,16"/>
 
-                <Border Grid.Row="2" 
-                        Background="{StaticResource SurfaceAltBrush}" 
-                        CornerRadius="{StaticResource ControlCornerRadius}" 
-                        Padding="12" 
+                <Border Grid.Row="2"
+                        Background="{StaticResource SurfaceAltBrush}"
+                        CornerRadius="{StaticResource ControlCornerRadius}"
+                        Padding="12"
                         Margin="0,0,0,16">
                   <ListBox x:Name="GlobalUsersListBox"
                            ScrollViewer.VerticalScrollBarVisibility="Auto">
@@ -340,44 +365,41 @@
                                 Margin="0,2"
                                 Cursor="Hand">
                           <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" VerticalAlignment="Center">
-                            <!-- Аватарка -->
                             <Border Grid.Column="0" Width="40" Height="40" Background="Black" CornerRadius="6" ClipToBounds="True">
                               <Image Stretch="UniformToFill" Source="{Binding AvatarBitmap}"/>
                             </Border>
 
-                            <!-- Имя пользователя -->
                             <TextBlock Grid.Column="1"
                                        Text="{Binding Username}"
                                        FontSize="16"
                                        Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
 
-                            <!-- Кнопки действия -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                               <Button Content="Добавить в друзья"
-                                      Classes="elevated" 
-                                      Padding="8,4" 
+                                      Classes="elevated"
+                                      Padding="8,4"
                                       FontSize="12"
                                       MinWidth="140"
                                       Tag="{Binding Id}"
                                       IsVisible="{Binding CanAddFriend}"/>
                               <Button Content="Принять"
-                                      Classes="elevated" 
-                                      Padding="8,4" 
+                                      Classes="elevated"
+                                      Padding="8,4"
                                       FontSize="12"
                                       MinWidth="140"
                                       Tag="{Binding Id}"
                                       IsVisible="{Binding HasIncomingRequest}"/>
                               <Button Content="Отклонить"
-                                      Classes="outlined" 
-                                      Padding="8,4" 
+                                      Classes="outlined"
+                                      Padding="8,4"
                                       FontSize="12"
                                       MinWidth="140"
                                       Tag="{Binding Id}"
                                       IsVisible="{Binding HasIncomingRequest}"/>
                               <Button Content="Отменить запрос"
-                                      Classes="outlined" 
-                                      Padding="8,4" 
+                                      Classes="outlined"
+                                      Padding="8,4"
                                       FontSize="12"
                                       MinWidth="140"
                                       Tag="{Binding Id}"
@@ -390,9 +412,9 @@
                   </ListBox>
                 </Border>
 
-                <Border Grid.Row="3" 
-                        Background="{StaticResource SurfaceAltBrush}" 
-                        CornerRadius="{StaticResource ControlCornerRadius}" 
+                <Border Grid.Row="3"
+                        Background="{StaticResource SurfaceAltBrush}"
+                        CornerRadius="{StaticResource ControlCornerRadius}"
                         Padding="16,12">
                   <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="16">
                     <Button x:Name="PrevPageButton" Content="← Назад" Classes="outlined" IsEnabled="False" MinWidth="140"/>
@@ -403,9 +425,9 @@
               </Grid>
 
               <Grid x:Name="FriendsPanel" RowDefinitions="Auto,*,Auto" Grid.Row="0" Grid.RowSpan="3" IsVisible="False">
-                <!-- Верхняя панель с кнопками "Друзья" и "Запросы" -->
                 <StackPanel Grid.Row="0" Margin="0,0,0,16">
                     <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,16">
+                        <Button x:Name="BackFromFriendsButton" Content="← Назад" Classes="outlined" Width="140"/>
                         <TextBlock Text="Друзья и запросы" Classes="title" VerticalAlignment="Center"/>
                     </StackPanel>
                     <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
@@ -414,12 +436,11 @@
                     </Grid>
                 </StackPanel>
 
-                <!-- Вкладка "Друзья" (видима по умолчанию) -->
-                <Border Grid.Row="1" 
+                <Border Grid.Row="1"
                         x:Name="FriendsTabContent"
-                        Background="{StaticResource SurfaceAltBrush}" 
-                        CornerRadius="{StaticResource ControlCornerRadius}" 
-                        Padding="20" 
+                        Background="{StaticResource SurfaceAltBrush}"
+                        CornerRadius="{StaticResource ControlCornerRadius}"
+                        Padding="20"
                         Margin="0,0,0,16"
                         IsVisible="True">
                     <ListBox x:Name="FriendsListBox"
@@ -445,18 +466,18 @@
                                     </Border.ContextMenu>
                                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12" VerticalAlignment="Center">
                                         <!-- Avatar -->
-                                        <Border Grid.Column="0" 
-                                                Width="48" 
-                                                Height="48" 
-                                                Background="Black" 
-                                                CornerRadius="6" 
+                                        <Border Grid.Column="0"
+                                                Width="48"
+                                                Height="48"
+                                                Background="Black"
+                                                CornerRadius="6"
                                                 ClipToBounds="True">
                                             <Image Stretch="UniformToFill" Source="{Binding AvatarBitmap}"/>
                                         </Border>
                                         <!-- Username -->
                                         <TextBlock Grid.Column="1"
-                                                   Text="{Binding Username}" 
-                                                   FontSize="14" 
+                                                   Text="{Binding Username}"
+                                                   FontSize="14"
                                                    Foreground="{StaticResource TextPrimaryBrush}"
                                                    VerticalAlignment="Center"/>
                                     </Grid>
@@ -466,19 +487,17 @@
                     </ListBox>
                 </Border>
 
-                <!-- Вкладка "Запросы" (скрыта по умолчанию) -->
-                <Border Grid.Row="1" 
+                <Border Grid.Row="1"
                         x:Name="RequestsTabContent"
-                        Background="{StaticResource SurfaceAltBrush}" 
-                        CornerRadius="{StaticResource ControlCornerRadius}" 
+                        Background="{StaticResource SurfaceAltBrush}"
+                        CornerRadius="{StaticResource ControlCornerRadius}"
                         Padding="20"
                         Margin="0,0,0,16"
                         IsVisible="False">
                     <Grid ColumnDefinitions="*,Auto,*">
-                        <!-- Левая колонка: входящие запросы -->
                         <Grid Grid.Column="0" RowDefinitions="Auto,*">
                             <TextBlock Text="Входящие запросы" Classes="caption" Margin="0,0,0,8"/>
-                            <ListBox Grid.Row="1" 
+                            <ListBox Grid.Row="1"
                                      x:Name="IncomingRequestsListBox"
                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                                      BorderThickness="0"
@@ -492,34 +511,34 @@
                                                 Height="80">
                                             <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12">
                                                 <!-- Avatar -->
-                                                <Border Grid.Column="0" 
-                                                        Width="48" 
-                                                        Height="48" 
-                                                        Background="Black" 
-                                                        CornerRadius="6" 
+                                                <Border Grid.Column="0"
+                                                        Width="48"
+                                                        Height="48"
+                                                        Background="Black"
+                                                        CornerRadius="6"
                                                         ClipToBounds="True"
                                                         VerticalAlignment="Center">
                                                     <Image Stretch="UniformToFill" Source="{Binding AvatarBitmap}"/>
                                                 </Border>
                                                 <!-- Username -->
-                                                <TextBlock Grid.Column="1" 
-                                                           Text="{Binding Username}" 
-                                                           FontSize="14" 
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Username}"
+                                                           FontSize="14"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            VerticalAlignment="Center"/>
                                                 <!-- Buttons -->
-                                                <Button Grid.Column="2" 
+                                                <Button Grid.Column="2"
                                                         x:Name="AcceptIncomingButton"
-                                                        Content="Принять" 
-                                                        Classes="elevated" 
-                                                        Padding="8,4" 
+                                                        Content="Принять"
+                                                        Classes="elevated"
+                                                        Padding="8,4"
                                                         FontSize="12"
                                                         Tag="{Binding Id}"/>
-                                                <Button Grid.Column="3" 
+                                                <Button Grid.Column="3"
                                                         x:Name="RejectIncomingButton"
-                                                        Content="Отклонить" 
-                                                        Classes="outlined" 
-                                                        Padding="8,4" 
+                                                        Content="Отклонить"
+                                                        Classes="outlined"
+                                                        Padding="8,4"
                                                         FontSize="12"
                                                         Tag="{Binding Id}"/>
                                             </Grid>
@@ -529,17 +548,15 @@
                             </ListBox>
                         </Grid>
 
-                        <!-- Вертикальный разделитель -->
-                        <Border Grid.Column="1" 
-                                Width="1" 
-                                Background="{StaticResource TextSecondaryBrush}" 
-                                Opacity="0.3" 
+                        <Border Grid.Column="1"
+                                Width="1"
+                                Background="{StaticResource TextSecondaryBrush}"
+                                Opacity="0.3"
                                 Margin="20,0"/>
 
-                        <!-- Правая колонка: исходящие запросы -->
                         <Grid Grid.Column="2" RowDefinitions="Auto,*">
                             <TextBlock Text="Исходящие запросы" Classes="caption" Margin="0,0,0,8"/>
-                            <ListBox Grid.Row="1" 
+                            <ListBox Grid.Row="1"
                                      x:Name="OutgoingRequestsListBox"
                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                                      BorderThickness="0"
@@ -553,27 +570,27 @@
                                                 Height="80">
                                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
                                                 <!-- Avatar -->
-                                                <Border Grid.Column="0" 
-                                                        Width="48" 
-                                                        Height="48" 
-                                                        Background="Black" 
-                                                        CornerRadius="6" 
+                                                <Border Grid.Column="0"
+                                                        Width="48"
+                                                        Height="48"
+                                                        Background="Black"
+                                                        CornerRadius="6"
                                                         ClipToBounds="True"
                                                         VerticalAlignment="Center">
                                                     <Image Stretch="UniformToFill" Source="{Binding AvatarBitmap}"/>
                                                 </Border>
                                                 <!-- Username -->
                                                 <TextBlock Grid.Column="1"
-                                                           Text="{Binding Username}" 
-                                                           FontSize="14" 
+                                                           Text="{Binding Username}"
+                                                           FontSize="14"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            VerticalAlignment="Center"/>
                                                 <!-- Button -->
-                                                <Button Grid.Column="2" 
+                                                <Button Grid.Column="2"
                                                         x:Name="CancelOutgoingButton"
                                                         Content="Отменить запрос" 
-                                                        Classes="outlined" 
-                                                        Padding="8,4" 
+                                                        Classes="outlined"
+                                                        Padding="8,4"
                                                         FontSize="12"
                                                         Tag="{Binding Id}"/>
                                             </Grid>
@@ -585,7 +602,6 @@
                     </Grid>
                 </Border>
 
-                <!-- Нижняя информационная панель удалена -->
             </Grid>
             </Grid>
           </Grid>
@@ -603,8 +619,12 @@
               <Button x:Name="BackFromSettingsButton" Content="Назад" Classes="outlined" Width="120"/>
               <TextBlock Text="Настройки" Classes="title" VerticalAlignment="Center"/>
             </StackPanel>
-            <Button x:Name="VoiceSettingsButton" Content="Голосовые настройки" HorizontalAlignment="Stretch"/>
+            <Button x:Name="VoiceSettingsButton" Content="Голосовые нстройки" HorizontalAlignment="Stretch"/>
             <Button x:Name="AvatarSettingsButton" Content="Смена аватарки" HorizontalAlignment="Stretch"/>
+            <Button x:Name="LogoutButton"
+                    Content="Выйти из аккаунта"
+                    Classes="outlined"
+                    HorizontalAlignment="Stretch"/>
           </StackPanel>
         </Border>
 
@@ -631,7 +651,7 @@
               <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
                 <Button x:Name="TestVoiceButton" Content="Проверить голос" Width="200" VerticalAlignment="Center"/>
                 <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Stretch" ClipToBounds="False">
-                  <TextBlock Text="Громкость с микрофона" Classes="caption"/>
+                  <TextBlock Text="Громкость с микрофона°" Classes="caption"/>
                   <Border Margin="0,24,0,24" ClipToBounds="False">
                     <Slider x:Name="VoiceVolumeSlider" IsEnabled="False" Minimum="0" Maximum="100" Value="0" TickFrequency="10"/>
                   </Border>
@@ -653,14 +673,14 @@
             <Border Padding="20,20" ClipToBounds="False">
               <StackPanel Spacing="20" HorizontalAlignment="Center">
                 <Border Width="512" Height="512" Background="Black" CornerRadius="8" ClipToBounds="True">
-                  <Image x:Name="AvatarImage" 
+                  <Image x:Name="AvatarImage"
                          Stretch="UniformToFill"/>
                 </Border>
                 <StackPanel Spacing="12" HorizontalAlignment="Center">
                   <Button x:Name="SelectAvatarButton" Content="Сменить аватарку" Width="300" HorizontalAlignment="Center"/>
-                  <TextBlock x:Name="AvatarStatusMessage" 
-                             Text="" 
-                             FontSize="14" 
+                  <TextBlock x:Name="AvatarStatusMessage"
+                             Text=""
+                             FontSize="14"
                              Foreground="Green"
                              HorizontalAlignment="Center"
                              TextWrapping="Wrap"/>
@@ -670,7 +690,131 @@
           </StackPanel>
         </Border>
       </Grid>
-      <!-- Оверлей входящего звонка -->
+      <Border x:Name="CreateGroupOverlay"
+              IsVisible="False"
+              Background="#CC1F2937">
+        <Border Background="{StaticResource SurfaceBrush}"
+                CornerRadius="16"
+                Padding="24"
+                Width="520"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+          <StackPanel Spacing="16">
+            <TextBlock Text="Создать группу"
+                       Classes="title"/>
+            <TextBlock Text="Выберите минимум двух друзей"
+                       Classes="muted"/>
+            <ListBox x:Name="CreateGroupFriendsListBox"
+                     SelectionMode="Multiple"
+                     MinHeight="220"
+                     MaxHeight="320"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+              <ListBox.ItemTemplate>
+                <DataTemplate DataType="models:FriendListItemDto">
+                  <Border Background="{StaticResource SurfaceAltBrush}"
+                          CornerRadius="8"
+                          Padding="12"
+                          Margin="0,2">
+                    <TextBlock Text="{Binding Username}"
+                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock x:Name="CreateGroupSelectionText"
+                       Text="Выбрано: 0"
+                       Classes="muted"/>
+            <TextBlock x:Name="CreateGroupStatusText"
+                       Text=""
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       TextWrapping="Wrap"/>
+            <StackPanel Orientation="Horizontal"
+                        Spacing="12"
+                        HorizontalAlignment="Right">
+              <Button x:Name="CloseCreateGroupButton"
+                      Content="Отмена"
+                      Classes="outlined"/>
+              <Button x:Name="ConfirmCreateGroupButton"
+                      Content="Создать"
+                      IsEnabled="False"/>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Border>
+      <Border x:Name="GroupMembersOverlay"
+              IsVisible="False"
+              Background="#CC1F2937">
+        <Border Background="{StaticResource SurfaceBrush}"
+                CornerRadius="16"
+                Padding="24"
+                Width="560"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+          <StackPanel Spacing="16">
+            <TextBlock Text="Участники группы"
+                       Classes="title"/>
+            <StackPanel Spacing="8">
+              <TextBlock Text="Сейчас в группе"
+                         Classes="caption"/>
+              <ScrollViewer MaxHeight="180"
+                            VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="CurrentGroupMembersItemsControl">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="models:ChatParticipantDto">
+                      <Border Background="{StaticResource SurfaceAltBrush}"
+                              CornerRadius="8"
+                              Padding="12"
+                              Margin="0,2">
+                        <TextBlock Text="{Binding DisplayName}"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </StackPanel>
+            <StackPanel Spacing="8">
+              <TextBlock Text="Добавить из друзей"
+                         Classes="caption"/>
+              <ListBox x:Name="AddGroupMembersListBox"
+                       SelectionMode="Multiple"
+                       MinHeight="140"
+                       MaxHeight="220"
+                       ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBox.ItemTemplate>
+                  <DataTemplate DataType="models:FriendListItemDto">
+                    <Border Background="{StaticResource SurfaceAltBrush}"
+                            CornerRadius="8"
+                            Padding="12"
+                            Margin="0,2">
+                      <TextBlock Text="{Binding Username}"
+                                 Foreground="{StaticResource TextPrimaryBrush}"/>
+                    </Border>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </StackPanel>
+            <TextBlock x:Name="GroupMembersSelectionText"
+                       Text="Выбрано для добавления: 0"
+                       Classes="muted"/>
+            <TextBlock x:Name="GroupMembersStatusText"
+                       Text=""
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       TextWrapping="Wrap"/>
+            <StackPanel Orientation="Horizontal"
+                        Spacing="12"
+                        HorizontalAlignment="Right">
+              <Button x:Name="CloseGroupMembersButton"
+                      Content="Закрыть"
+                      Classes="outlined"/>
+              <Button x:Name="ConfirmAddGroupMembersButton"
+                      Content="Добавить"
+                      IsEnabled="False"/>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Border>
+
       <Border x:Name="IncomingCallOverlay"
               IsVisible="False"
               Background="#CC1F2937">
@@ -692,7 +836,7 @@
                        Foreground="{StaticResource TextSecondaryBrush}"/>
             <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center">
               <Button x:Name="AcceptCallButton" Content="✔ Принять" Width="140"/>
-              <Button x:Name="RejectCallButton" Content="✖ Отклонить" Classes="outlined" Width="140"/>
+              <Button x:Name="RejectCallButton" Content="✖ Отклонитьы" Classes="outlined" Width="140"/>
             </StackPanel>
           </StackPanel>
         </Border>

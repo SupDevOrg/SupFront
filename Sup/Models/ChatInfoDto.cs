@@ -32,5 +32,8 @@ namespace Sup.Models
                     LastMessageTime = value;
             }
         }
+
+        [JsonPropertyName("is_group")]
+        public bool IsGroup { get; set; }
     }
 }

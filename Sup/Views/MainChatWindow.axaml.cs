@@ -1,9 +1,12 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using NAudio.CoreAudioApi;
+using Sup.ForTokens;
 using Sup.Models;
 using Sup.Services;
 using System;
@@ -40,7 +43,13 @@ namespace Sup.Views
 
         private System.Timers.Timer? _chatListTimer;
         private Dictionary<uint, ChatDto> _pendingChats = new Dictionary<uint, ChatDto>();
+        private List<FriendListItemDto> _cachedFriends = new();
+        private List<ChatParticipantDto> _currentChatParticipants = new();
         private bool _isVoiceTestActive = false;
+        private bool _currentChatIsGroup = false;
+        private bool _suppressChatSelectionChanged = false;
+        private uint _currentChatAvatarUserId = 0;
+        private bool _isLoggingOut = false;
         private List<SearchResultItemDto> _currentSearchResults = new();
         private string _selectedAvatarFilePath = string.Empty;
         private bool _isAvatarPendingConfirmation = false;
@@ -106,11 +115,15 @@ namespace Sup.Views
         {
             SearchTabButton.Click += OnSearchTabClicked;
             FriendsTabButton.Click += OnFriendsTabClicked;
+            CreateGroupButton.Click += OnCreateGroupButtonClicked;
+            BackToChatButton.Click += OnBackToChatClicked;
+            BackFromFriendsButton.Click += OnBackFromFriendsClicked;
             SearchGlobalTextBox.KeyUp += async (s, e) => await OnSearchUsersAsync();
             GlobalUsersListBox.DoubleTapped += OnGlobalUserSelected;
             SettingsButton.Click += OnSettingsClicked;
             VoiceSettingsButton.Click += OnVoiceSettingsClicked;
             AvatarSettingsButton.Click += OnAvatarSettingsClicked;
+            LogoutButton.Click += OnLogoutClicked;
             BackFromSettingsButton.Click += OnBackFromSettingsClicked;
             TestVoiceButton.Click += OnTestVoiceClicked;
             SelectAvatarButton.Click += OnSelectAvatarClicked;
@@ -118,7 +131,14 @@ namespace Sup.Views
             NextPageButton.Click += OnNextPageClick;
             SendMessageButton.Click += OnSendMessageClicked;
             CallButton.Click += OnCallButtonClicked;
+            ManageGroupButton.Click += OnManageGroupButtonClicked;
             UsersListBox.SelectionChanged += OnChatSelected;
+            CloseCreateGroupButton.Click += OnCloseCreateGroupButtonClicked;
+            ConfirmCreateGroupButton.Click += OnConfirmCreateGroupButtonClicked;
+            CreateGroupFriendsListBox.SelectionChanged += OnGroupSelectionChanged;
+            CloseGroupMembersButton.Click += OnCloseGroupMembersButtonClicked;
+            ConfirmAddGroupMembersButton.Click += OnConfirmAddGroupMembersButtonClicked;
+            AddGroupMembersListBox.SelectionChanged += OnGroupSelectionChanged;
 
             FriendsTabButton2.Click += OnFriendsTabButton2Clicked;
             RequestsTabButton.Click += OnRequestsTabButtonClicked;
@@ -334,6 +354,8 @@ namespace Sup.Views
             ChatPanel.IsVisible = true;
             GlobalSearchPanel.IsVisible = false;
             FriendsPanel.IsVisible = false;
+            CreateGroupOverlay.IsVisible = false;
+            GroupMembersOverlay.IsVisible = false;
             ResetTabsState();
         }
 
@@ -342,6 +364,8 @@ namespace Sup.Views
             ChatPanel.IsVisible = false;
             GlobalSearchPanel.IsVisible = true;
             FriendsPanel.IsVisible = false;
+            CreateGroupOverlay.IsVisible = false;
+            GroupMembersOverlay.IsVisible = false;
             SearchGlobalTextBox.Text = string.Empty;
             GlobalUsersListBox.ItemsSource = new List<SearchResultItemDto>();
             ResetPagination();
@@ -354,6 +378,8 @@ namespace Sup.Views
             ChatPanel.IsVisible = false;
             GlobalSearchPanel.IsVisible = false;
             FriendsPanel.IsVisible = true;
+            CreateGroupOverlay.IsVisible = false;
+            GroupMembersOverlay.IsVisible = false;
             SetActiveTab(FriendsTabButton, SearchTabButton);
         }
 
@@ -457,7 +483,8 @@ namespace Sup.Views
                     ChatId = c.Id,
                     DisplayName = c.Name,
                     LastMessage = c.LastMessage,
-                    LastMessageTime = c.LastMessageTime.ToString("HH:mm")
+                    LastMessageTime = c.LastMessageTime.ToString("HH:mm"),
+                    IsGroup = c.IsGroup
                 }).ToList();
 
                 UsersListBox.ItemsSource = items;
@@ -499,49 +526,168 @@ namespace Sup.Views
             }
         }
 
+        private void ConfigurePrivateChatHeader(string displayName, uint? avatarUserId = null)
+        {
+            _currentChatIsGroup = false;
+            _currentChatUserName = displayName;
+            _currentChatParticipants = new List<ChatParticipantDto>();
+            _currentChatAvatarUserId = avatarUserId ?? 0;
+
+            ChatUserName.Text = displayName;
+            ChatSubtitleText.Text = "История ваших сообщений";
+            ManageGroupButton.IsVisible = false;
+            CallButton.IsVisible = true;
+            CallButton.IsEnabled = true;
+            CallButton.Opacity = 1;
+            ChatUserAvatarPlaceholder.IsVisible = false;
+            ChatUserAvatarImage.Source = null;
+
+            if (avatarUserId.HasValue && avatarUserId.Value > 0)
+                _ = LoadChatUserAvatarAsync(avatarUserId.Value);
+        }
+
+        private void ConfigureGroupChatHeader(string displayName, List<ChatParticipantDto> participants)
+        {
+            _currentChatIsGroup = true;
+            _currentChatUserName = displayName;
+            _currentChatParticipants = participants;
+            _currentChatAvatarUserId = 0;
+
+            ChatUserName.Text = displayName;
+            ChatSubtitleText.Text = participants.Count > 0
+                ? $"Групповой чат • {participants.Count} участников"
+                : "Групповой чат";
+            ManageGroupButton.IsVisible = true;
+            CallButton.IsVisible = false;
+            CallButton.IsEnabled = false;
+            ChatUserAvatarImage.Source = null;
+            ChatUserAvatarPlaceholder.IsVisible = true;
+        }
+
+        private void RefreshGroupSelectionState()
+        {
+            var createSelectionCount = CreateGroupFriendsListBox.SelectedItems?.Count ?? 0;
+            CreateGroupSelectionText.Text = $"Выбрано: {createSelectionCount}";
+            ConfirmCreateGroupButton.IsEnabled = createSelectionCount >= 2;
+
+            var addSelectionCount = AddGroupMembersListBox.SelectedItems?.Count ?? 0;
+            GroupMembersSelectionText.Text = $"Выбрано для добавления: {addSelectionCount}";
+            ConfirmAddGroupMembersButton.IsEnabled = addSelectionCount > 0;
+        }
+
+        private async Task OpenChatAsync(ChatListItem selectedChat)
+        {
+            Console.WriteLine($"[OpenChatAsync] Открываем чат {selectedChat.ChatId} (Group={selectedChat.IsGroup})");
+            _currentChatId = selectedChat.ChatId;
+
+            if (_pendingChats.TryGetValue(selectedChat.ChatId, out var pendingChat))
+            {
+                ConfigurePrivateChatHeader(pendingChat.Name, pendingChat.OtherUserId);
+                await Dispatcher.UIThread.InvokeAsync(() => MessagesListBox.ItemsSource = new List<MessageListItem>());
+                return;
+            }
+
+            if (selectedChat.IsGroup)
+            {
+                var participants = await _chatService.GetChatParticipantsAsync(selectedChat.ChatId);
+                ConfigureGroupChatHeader(selectedChat.DisplayName, participants);
+            }
+            else
+            {
+                var otherUserId = await _chatService.GetOtherUserIdForChat(selectedChat.ChatId);
+                ConfigurePrivateChatHeader(selectedChat.DisplayName, otherUserId > 0 ? otherUserId : null);
+            }
+
+            var messages = await _chatService.LoadChatHistoryAsync(selectedChat.ChatId);
+            await UpdateMessagesListAsync(messages);
+            await _webSocketService.OpenAsync(selectedChat.ChatId, _currentUserId);
+
+            if (selectedChat.IsGroup)
+            {
+                if (!_voiceCallService.IsCallActive)
+                    _signalingService.Disconnect();
+                return;
+            }
+
+            if (!_voiceCallService.IsCallActive)
+                _ = ConnectToSignalingRoomAsync(selectedChat.ChatId);
+        }
+
+        private async Task SelectChatByIdAsync(uint chatId)
+        {
+            var chats = await _chatService.GetUserChatsAsync();
+            ChatListItem? selectedItem = null;
+
+            ShowChatPanel();
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                UpdateChatsList(chats);
+                selectedItem = (UsersListBox.ItemsSource as List<ChatListItem>)
+                    ?.FirstOrDefault(item => item.ChatId == chatId);
+
+                if (selectedItem != null)
+                {
+                    _suppressChatSelectionChanged = true;
+                    UsersListBox.SelectedItem = selectedItem;
+                    _suppressChatSelectionChanged = false;
+                }
+            });
+
+            if (selectedItem != null)
+                await OpenChatAsync(selectedItem);
+        }
+
+        private async Task LoadCreateGroupCandidatesAsync()
+        {
+            if (_cachedFriends.Count == 0)
+                await LoadFriendsAsync();
+
+            CreateGroupFriendsListBox.ItemsSource = new List<FriendListItemDto>(_cachedFriends);
+            CreateGroupFriendsListBox.SelectedItems?.Clear();
+            CreateGroupStatusText.Text = string.Empty;
+            CreateGroupOverlay.IsVisible = true;
+            RefreshGroupSelectionState();
+        }
+
+        private List<FriendListItemDto> BuildAvailableGroupCandidates()
+        {
+            var existingMemberIds = _currentChatParticipants
+                .Select(participant => participant.Id)
+                .ToHashSet();
+
+            return _cachedFriends
+                .Where(friend => !existingMemberIds.Contains(friend.Id))
+                .OrderBy(friend => friend.Username)
+                .ToList();
+        }
+
+        private async Task LoadGroupMembersOverlayAsync()
+        {
+            if (!_currentChatId.HasValue || !_currentChatIsGroup)
+                return;
+
+            if (_cachedFriends.Count == 0)
+                await LoadFriendsAsync();
+
+            _currentChatParticipants = await _chatService.GetChatParticipantsAsync(_currentChatId.Value);
+            CurrentGroupMembersItemsControl.ItemsSource = _currentChatParticipants;
+            AddGroupMembersListBox.ItemsSource = BuildAvailableGroupCandidates();
+            AddGroupMembersListBox.SelectedItems?.Clear();
+            GroupMembersStatusText.Text = string.Empty;
+            GroupMembersOverlay.IsVisible = true;
+            RefreshGroupSelectionState();
+        }
+
         private async void OnChatSelected(object? sender, SelectionChangedEventArgs e)
         {
-            ChatPanel.IsVisible = true;
-            GlobalSearchPanel.IsVisible = false;
-            FriendsPanel.IsVisible = false;
+            if (_suppressChatSelectionChanged)
+                return;
 
+            ShowChatPanel();
             await RemoveEmptyPendingChatIfCurrentAsync();
 
             if (UsersListBox.SelectedItem is ChatListItem selectedChat && selectedChat.ChatId != 0)
-            {
-                Console.WriteLine($"[OnChatSelected] Выбран чат: {selectedChat.DisplayName} (ID: {selectedChat.ChatId})");
-
-                _currentChatId = selectedChat.ChatId;
-                _currentChatUserName = selectedChat.DisplayName;
-                ChatUserName.Text = selectedChat.DisplayName;
-
-                if (_pendingChats.TryGetValue(selectedChat.ChatId, out var pendingChat))
-                {
-                    Console.WriteLine($"[OnChatSelected] Это временный чат с пользователем {pendingChat.Name}");
-                    await Dispatcher.UIThread.InvokeAsync(() =>
-                    {
-                        MessagesListBox.ItemsSource = new List<MessageListItem>();
-                    });
-                }
-                else
-                {
-                    Console.WriteLine($"[OnChatSelected] Загружаем историю чата {selectedChat.ChatId}");
-                    var messages = await _chatService.LoadChatHistoryAsync(selectedChat.ChatId);
-                    await UpdateMessagesListAsync(messages);
-
-                    var otherUserId = await _chatService.GetOtherUserIdForChat(selectedChat.ChatId);
-                    if (otherUserId > 0)
-                    {
-                        Console.WriteLine($"[OnChatSelected] Открываем WebSocket для чата {selectedChat.ChatId} с пользователем {otherUserId}");
-                        await _webSocketService.OpenAsync(selectedChat.ChatId, _currentUserId, otherUserId);
-                        _ = LoadChatUserAvatarAsync(otherUserId);
-                    }
-
-                    // Подключаемся к сигнальной комнате для получения входящих звонков
-                    if (!_voiceCallService.IsCallActive)
-                        _ = ConnectToSignalingRoomAsync(selectedChat.ChatId);
-                }
-            }
+                await OpenChatAsync(selectedChat);
         }
 
         private async Task UpdateMessagesListAsync(List<MessageDto> messages)
@@ -586,7 +732,7 @@ namespace Sup.Views
             if (senderId == _currentUserId)
                 return _currentUsername;
 
-            if (!string.IsNullOrWhiteSpace(_currentChatUserName))
+            if (!_currentChatIsGroup && !string.IsNullOrWhiteSpace(_currentChatUserName))
                 return _currentChatUserName;
 
             var loaded = await _chatService.GetUserNameByIdAsync(senderId);
@@ -647,10 +793,8 @@ namespace Sup.Views
                     _pendingChats.Remove(_currentChatId.Value);
                     _currentChatId = realChatId;
 
-                    await _webSocketService.OpenAsync(realChatId.Value, _currentUserId, pendingChat.OtherUserId);
-                    
-                    var chats = await _chatService.GetUserChatsAsync();
-                    UpdateChatsList(chats);
+                    await _webSocketService.OpenAsync(realChatId.Value, _currentUserId);
+                    await SelectChatByIdAsync(realChatId.Value);
                 }
 
                 MessageTextBox.Text = string.Empty;
@@ -696,6 +840,12 @@ namespace Sup.Views
             if (_voiceCallService.IsCallActive)
             {
                 await EndCallAsync();
+                return;
+            }
+
+            if (_currentChatIsGroup)
+            {
+                Console.WriteLine("[OnCallButtonClicked] Group calls are disabled");
                 return;
             }
 
@@ -871,6 +1021,12 @@ namespace Sup.Views
             ShowSearchPanel();
         }
 
+        private void OnBackToChatClicked(object? sender, RoutedEventArgs e)
+        {
+            Console.WriteLine("[OnBackToChatClicked] Возврат к чатам");
+            ShowChatPanel();
+        }
+
         private void OnSearchTabClicked(object? sender, RoutedEventArgs e)
         {
             _ = RemoveEmptyPendingChatIfCurrentAsync();
@@ -899,18 +1055,20 @@ namespace Sup.Views
             await LoadFriendsAsync();
         }
 
+        private void OnBackFromFriendsClicked(object? sender, RoutedEventArgs e)
+        {
+            Console.WriteLine("[OnBackFromFriendsClicked] Возврат к чатам из друзей");
+            ShowChatPanel();
+        }
+
         private async void OnGlobalUserSelected(object? sender, RoutedEventArgs e)
         {
             if (GlobalUsersListBox.SelectedItem is SearchResultItemDto item)
             {
                 Console.WriteLine($"[OnGlobalUserSelected] Выбран пользователь: {item.Username}");
 
-                GlobalSearchPanel.IsVisible = false;
-                ChatPanel.IsVisible = true;
-
-                _currentChatUserName = item.Username;
-                ChatUserName.Text = item.Username;
-                _ = LoadChatUserAvatarAsync(item.Id);
+                ShowChatPanel();
+                ConfigurePrivateChatHeader(item.Username, item.Id);
 
                 var tempChatId = (uint)(Guid.NewGuid().GetHashCode() & 0x7FFFFFFF);
                 var pendingChat = new ChatDto
@@ -935,6 +1093,92 @@ namespace Sup.Views
                 var chats = await _chatService.GetUserChatsAsync();
                 UpdateChatsList(chats);
             }
+        }
+
+        private async void OnCreateGroupButtonClicked(object? sender, RoutedEventArgs e)
+        {
+            await LoadCreateGroupCandidatesAsync();
+        }
+
+        private void OnCloseCreateGroupButtonClicked(object? sender, RoutedEventArgs e)
+        {
+            CreateGroupOverlay.IsVisible = false;
+            CreateGroupStatusText.Text = string.Empty;
+        }
+
+        private async void OnConfirmCreateGroupButtonClicked(object? sender, RoutedEventArgs e)
+        {
+            var selectedFriends = CreateGroupFriendsListBox.SelectedItems?
+                .OfType<FriendListItemDto>()
+                .ToList() ?? new List<FriendListItemDto>();
+
+            if (selectedFriends.Count < 2)
+            {
+                CreateGroupStatusText.Text = "Нужно выбрать минимум двух друзей.";
+                return;
+            }
+
+            ConfirmCreateGroupButton.IsEnabled = false;
+            CreateGroupStatusText.Text = "Создаём группу...";
+
+            var createdChatId = await _chatService.CreateGroupChatAsync(selectedFriends.Select(friend => friend.Id));
+            if (createdChatId == null)
+            {
+                CreateGroupStatusText.Text = "Не удалось создать групповой чат.";
+                RefreshGroupSelectionState();
+                return;
+            }
+
+            CreateGroupOverlay.IsVisible = false;
+            CreateGroupStatusText.Text = string.Empty;
+            await SelectChatByIdAsync(createdChatId.Value);
+        }
+
+        private async void OnManageGroupButtonClicked(object? sender, RoutedEventArgs e)
+        {
+            await LoadGroupMembersOverlayAsync();
+        }
+
+        private void OnCloseGroupMembersButtonClicked(object? sender, RoutedEventArgs e)
+        {
+            GroupMembersOverlay.IsVisible = false;
+            GroupMembersStatusText.Text = string.Empty;
+        }
+
+        private async void OnConfirmAddGroupMembersButtonClicked(object? sender, RoutedEventArgs e)
+        {
+            if (!_currentChatId.HasValue)
+                return;
+
+            var selectedFriends = AddGroupMembersListBox.SelectedItems?
+                .OfType<FriendListItemDto>()
+                .ToList() ?? new List<FriendListItemDto>();
+
+            if (selectedFriends.Count == 0)
+            {
+                GroupMembersStatusText.Text = "Выберите хотя бы одного друга.";
+                return;
+            }
+
+            ConfirmAddGroupMembersButton.IsEnabled = false;
+            GroupMembersStatusText.Text = "Добавляем участников...";
+
+            var added = await _chatService.AddUsersToChatAsync(_currentChatId.Value, selectedFriends.Select(friend => friend.Id));
+            if (!added)
+            {
+                GroupMembersStatusText.Text = "Не удалось добавить участников.";
+                RefreshGroupSelectionState();
+                return;
+            }
+
+            await SelectChatByIdAsync(_currentChatId.Value);
+            await LoadGroupMembersOverlayAsync();
+            GroupMembersStatusText.Text = "Участники добавлены.";
+        }
+
+        private void OnGroupSelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            RefreshGroupSelectionState();
         }
 
         private void OnPrevPageClick(object? sender, RoutedEventArgs e)
@@ -1017,21 +1261,79 @@ namespace Sup.Views
             AvatarPanel.IsVisible = false;
             MainPanels.IsVisible = true;
             LeftSearchPanel.IsVisible = true;
+        }
 
-            // Если сейчас открыт чат (панель чата видна и есть активный чат), возвращаемся в чат
-            if (ChatPanel.IsVisible && _currentChatId.HasValue)
+        private async void OnLogoutClicked(object? sender, RoutedEventArgs e)
+        {
+            await PerformLogoutAsync();
+        }
+
+        private async Task PerformLogoutAsync()
+        {
+            if (_isLoggingOut)
+                return;
+
+            _isLoggingOut = true;
+            var originalContent = LogoutButton.Content;
+            LogoutButton.IsEnabled = false;
+            LogoutButton.Content = "Выходим...";
+
+            try
             {
-                // Просто показываем панель чата, остальные скрываем
-                ChatPanel.IsVisible = true;
-                GlobalSearchPanel.IsVisible = false;
-                FriendsPanel.IsVisible = false;
-                ResetTabsState();
+                Console.WriteLine("[PerformLogoutAsync] Начинаем выход из аккаунта");
+                _chatListTimer?.Stop();
+
+                if (_isVoiceTestActive)
+                {
+                    _voiceTestService.Stop();
+                    _voiceTestService.OnAudioLevelChanged -= OnAudioLevelChanged;
+                    _isVoiceTestActive = false;
+                }
+
+                if (_voiceCallService.IsCallActive)
+                {
+                    try
+                    {
+                        await _signalingService.LeaveAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[PerformLogoutAsync] Ошибка leave при logout: {ex.Message}");
+                    }
+
+                    try
+                    {
+                        await _voiceCallService.HangUpAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[PerformLogoutAsync] Ошибка HangUpAsync при logout: {ex.Message}");
+                    }
+
+                    UpdateCallUI(false);
+                }
+
+                _webSocketService.Close();
+                _signalingService.Disconnect();
+                TokenManager.ClearTokens();
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    var loginWindow = new Sup.MainWindow();
+
+                    if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+                        desktop.MainWindow = loginWindow;
+
+                    loginWindow.Show();
+                    Close();
+                });
             }
-            else
+            catch (Exception ex)
             {
-                // Иначе переключаемся на панель друзей (как при клике на вкладку "Друзья")
-                ShowFriendsPanel();                      // Устанавливает видимость панелей и активную вкладку в левом меню
-                OnFriendsTabButton2Clicked(FriendsTabButton2, new RoutedEventArgs()); // Активирует вкладку "Друзья" и загружает список
+                Console.WriteLine($"[PerformLogoutAsync] Ошибка выхода из аккаунта: {ex.Message}");
+                LogoutButton.IsEnabled = true;
+                LogoutButton.Content = originalContent;
+                _isLoggingOut = false;
             }
         }
 
@@ -1245,7 +1547,9 @@ namespace Sup.Views
         /// <summary>Загружает аватарку собеседника в шапку чата по его userId.</summary>
         private async Task LoadChatUserAvatarAsync(uint userId)
         {
-            // Сразу сбрасываем старую аватарку — до первого await, на UI-потоке
+            if (_currentChatIsGroup || _currentChatAvatarUserId != userId)
+                return;
+
             ChatUserAvatarImage.Source = null;
 
             try
@@ -1253,13 +1557,17 @@ namespace Sup.Views
                 var userInfo = await _userSearchService.GetUserByIdAsync(userId);
                 if (string.IsNullOrEmpty(userInfo?.AvatarUrl))
                 {
-                    await Dispatcher.UIThread.InvokeAsync(() => ChatUserAvatarImage.Source = null);
+                    if (!_currentChatIsGroup && _currentChatAvatarUserId == userId)
+                        await Dispatcher.UIThread.InvokeAsync(() => ChatUserAvatarImage.Source = null);
                     return;
                 }
 
                 using var httpClient = new System.Net.Http.HttpClient();
                 var imageData = await httpClient.GetByteArrayAsync(userInfo.AvatarUrl);
                 var bitmap = new Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(imageData));
+                if (_currentChatIsGroup || _currentChatAvatarUserId != userId)
+                    return;
+
                 await Dispatcher.UIThread.InvokeAsync(() => ChatUserAvatarImage.Source = bitmap);
             }
             catch (Exception ex)
@@ -1423,6 +1731,7 @@ namespace Sup.Views
                     AvatarUrl = f.AvatarUrl
                 }).ToList();
 
+                _cachedFriends = friendItems;
                 FriendsListBox.ItemsSource = friendItems;
                 Console.WriteLine($"[LoadFriendsAsync] Загружено {friendItems.Count} друзей");
 
@@ -1433,6 +1742,7 @@ namespace Sup.Views
             }
             else
             {
+                _cachedFriends = new List<FriendListItemDto>();
                 FriendsListBox.ItemsSource = new List<FriendListItemDto>();
                 Console.WriteLine("[LoadFriendsAsync] Список друзей пуст");
             }
@@ -1567,9 +1877,7 @@ namespace Sup.Views
                 // ЛКМ - открыть чат
                 Console.WriteLine($"[OnFriendBorderPointerPressed] ЛКМ на друге: {friend.Username} (ID: {friend.Id})");
                 
-                // Сохраняем имя чата
-                _currentChatUserName = friend.Username;
-                ChatUserName.Text = friend.Username;
+                ConfigurePrivateChatHeader(friend.Username, friend.Id);
 
                 // Проверяем есть ли уже чат с этим пользователем
                 var existingChat = _pendingChats.Values.FirstOrDefault(c => c.OtherUserId == friend.Id && c.IsPending);
@@ -1613,12 +1921,7 @@ namespace Sup.Views
                 }
 
                 // Переключаемся на панель чатов
-                ChatPanel.IsVisible = true;
-                GlobalSearchPanel.IsVisible = false;
-                FriendsPanel.IsVisible = false;
-
-                // Загружаем аватарку собеседника в шапку
-                _ = LoadChatUserAvatarAsync(friend.Id);
+                ShowChatPanel();
 
                 // Загружаем сообщения для текущего чата (если это реальный чат)
                 if (!_pendingChats.ContainsKey(_currentChatId.Value))
@@ -1630,7 +1933,7 @@ namespace Sup.Views
                     if (otherUserId > 0)
                     {
                         Console.WriteLine($"[OnFriendBorderPointerPressed] Открываем WebSocket для чата {_currentChatId}");
-                        await _webSocketService.OpenAsync(_currentChatId.Value, _currentUserId, otherUserId);
+                        await _webSocketService.OpenAsync(_currentChatId.Value, _currentUserId);
                     }
                 }
                 else
@@ -1664,11 +1967,8 @@ namespace Sup.Views
             {
                 Console.WriteLine($"[OnFriendSelected] Двойной клик на друга: {friend.Username}");
                 
-                FriendsPanel.IsVisible = false;
-                ChatPanel.IsVisible = true;
-
-                _currentChatUserName = friend.Username;
-                ChatUserName.Text = friend.Username;
+                ShowChatPanel();
+                ConfigurePrivateChatHeader(friend.Username, friend.Id);
                 
                 var tempChatId = (uint)(Guid.NewGuid().GetHashCode() & 0x7FFFFFFF);
                 var pendingChat = new ChatDto
@@ -1849,6 +2149,9 @@ namespace Sup.Views
         // Подключается к сигнальной комнате пассивно (для приёма входящих звонков)
         private async Task ConnectToSignalingRoomAsync(uint chatId)
         {
+            if (_currentChatIsGroup)
+                return;
+
             try
             {
                 var roomId = $"chat-{chatId}";
