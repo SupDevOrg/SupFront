@@ -116,7 +116,6 @@ namespace Sup.Views
             SearchTabButton.Click += OnSearchTabClicked;
             FriendsTabButton.Click += OnFriendsTabClicked;
             CreateGroupButton.Click += OnCreateGroupButtonClicked;
-            BackToChatButton.Click += OnBackToChatClicked;
             BackFromFriendsButton.Click += OnBackFromFriendsClicked;
             SearchGlobalTextBox.KeyUp += async (s, e) => await OnSearchUsersAsync();
             GlobalUsersListBox.DoubleTapped += OnGlobalUserSelected;
@@ -682,7 +681,7 @@ namespace Sup.Views
         {
             if (_suppressChatSelectionChanged)
                 return;
-
+                
             ShowChatPanel();
             await RemoveEmptyPendingChatIfCurrentAsync();
 
@@ -1029,6 +1028,7 @@ namespace Sup.Views
 
         private void OnSearchTabClicked(object? sender, RoutedEventArgs e)
         {
+            UsersListBox.SelectedItems.Clear();
             _ = RemoveEmptyPendingChatIfCurrentAsync();
             Console.WriteLine("[OnSearchTabClicked] Выбрана вкладка поиска");
             ShowSearchPanel();
@@ -1036,6 +1036,7 @@ namespace Sup.Views
 
         private async void OnFriendsTabClicked(object? sender, RoutedEventArgs e)
         {
+            UsersListBox.SelectedItems.Clear();
             _ = RemoveEmptyPendingChatIfCurrentAsync();
             Console.WriteLine("[OnFriendsTabClicked] Выбрана вкладка друзей");
             ShowFriendsPanel();
