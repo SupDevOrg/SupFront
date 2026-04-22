@@ -309,7 +309,6 @@
 
               <Grid x:Name="GlobalSearchPanel" RowDefinitions="Auto,Auto,*,Auto" Grid.Row="0" Grid.RowSpan="3" IsVisible="False">
                 <StackPanel Orientation="Horizontal" Spacing="12" Grid.Row="0" Margin="0,0,0,16">
-                  <Button x:Name="BackToChatButton" Content="Назад" Classes="outlined" Width="140"/>
                   <TextBlock Text="Глобальный поиск" Classes="title" VerticalAlignment="Center"/>
                 </StackPanel>
 
@@ -407,7 +406,6 @@
                 <!-- Верхняя панель с кнопками "Друзья" и "Запросы" -->
                 <StackPanel Grid.Row="0" Margin="0,0,0,16">
                     <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,16">
-                        <Button x:Name="BackFromFriendsButton" Content="Назад" Classes="outlined" Width="140"/>
                         <TextBlock Text="Друзья и запросы" Classes="title" VerticalAlignment="Center"/>
                     </StackPanel>
                     <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
