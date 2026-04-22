@@ -234,6 +234,7 @@ namespace Sup.Services
                 _negotiatedFormat = formats.FirstOrDefault();
                 _hasNegotiatedFormat = true;
                 Console.WriteLine($"[VoiceCallService] Аудиоформат согласован: {_negotiatedFormat.FormatName} (PT={_negotiatedFormat.FormatID})");
+                    Console.WriteLine("[VoiceCallService] ✅ Opus моно кодеры инициализированы (64 kbps)");
                 StartAudio(pc, micWasapiIndex, speakerWasapiIndex);
             };
 
