@@ -1,9 +1,12 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using NAudio.CoreAudioApi;
+using Sup.ForTokens;
 using Sup.Models;
 using Sup.Services;
 using System;
@@ -46,6 +49,7 @@ namespace Sup.Views
         private bool _currentChatIsGroup = false;
         private bool _suppressChatSelectionChanged = false;
         private uint _currentChatAvatarUserId = 0;
+        private bool _isLoggingOut = false;
         private List<SearchResultItemDto> _currentSearchResults = new();
         private string _selectedAvatarFilePath = string.Empty;
         private bool _isAvatarPendingConfirmation = false;
@@ -119,6 +123,7 @@ namespace Sup.Views
             SettingsButton.Click += OnSettingsClicked;
             VoiceSettingsButton.Click += OnVoiceSettingsClicked;
             AvatarSettingsButton.Click += OnAvatarSettingsClicked;
+            LogoutButton.Click += OnLogoutClicked;
             BackFromSettingsButton.Click += OnBackFromSettingsClicked;
             TestVoiceButton.Click += OnTestVoiceClicked;
             SelectAvatarButton.Click += OnSelectAvatarClicked;
@@ -1256,6 +1261,80 @@ namespace Sup.Views
             AvatarPanel.IsVisible = false;
             MainPanels.IsVisible = true;
             LeftSearchPanel.IsVisible = true;
+        }
+
+        private async void OnLogoutClicked(object? sender, RoutedEventArgs e)
+        {
+            await PerformLogoutAsync();
+        }
+
+        private async Task PerformLogoutAsync()
+        {
+            if (_isLoggingOut)
+                return;
+
+            _isLoggingOut = true;
+            var originalContent = LogoutButton.Content;
+            LogoutButton.IsEnabled = false;
+            LogoutButton.Content = "Выходим...";
+
+            try
+            {
+                Console.WriteLine("[PerformLogoutAsync] Начинаем выход из аккаунта");
+                _chatListTimer?.Stop();
+
+                if (_isVoiceTestActive)
+                {
+                    _voiceTestService.Stop();
+                    _voiceTestService.OnAudioLevelChanged -= OnAudioLevelChanged;
+                    _isVoiceTestActive = false;
+                }
+
+                if (_voiceCallService.IsCallActive)
+                {
+                    try
+                    {
+                        await _signalingService.LeaveAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[PerformLogoutAsync] Ошибка leave при logout: {ex.Message}");
+                    }
+
+                    try
+                    {
+                        await _voiceCallService.HangUpAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[PerformLogoutAsync] Ошибка HangUpAsync при logout: {ex.Message}");
+                    }
+
+                    UpdateCallUI(false);
+                }
+
+                _webSocketService.Close();
+                _signalingService.Disconnect();
+                TokenManager.ClearTokens();
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    var loginWindow = new Sup.MainWindow();
+
+                    if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+                        desktop.MainWindow = loginWindow;
+
+                    loginWindow.Show();
+                    Close();
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[PerformLogoutAsync] Ошибка выхода из аккаунта: {ex.Message}");
+                LogoutButton.IsEnabled = true;
+                LogoutButton.Content = originalContent;
+                _isLoggingOut = false;
+            }
         }
 
         private void LoadAudioDevices()

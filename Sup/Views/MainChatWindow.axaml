@@ -621,6 +621,10 @@
             </StackPanel>
             <Button x:Name="VoiceSettingsButton" Content="Голосовые нстройки" HorizontalAlignment="Stretch"/>
             <Button x:Name="AvatarSettingsButton" Content="Смена аватарки" HorizontalAlignment="Stretch"/>
+            <Button x:Name="LogoutButton"
+                    Content="Выйти из аккаунта"
+                    Classes="outlined"
+                    HorizontalAlignment="Stretch"/>
           </StackPanel>
         </Border>
 
