@@ -1,10 +1,13 @@
+using Concentus;
+using Concentus.Enums;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
-using SIPSorcery.Net;
 using SIPSorcery.Media;
+using SIPSorcery.Net;
 using SIPSorceryMedia.Abstractions;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -19,10 +22,13 @@ namespace Sup.Services
         private AudioFormat _negotiatedFormat;
         private bool _hasNegotiatedFormat;
         private readonly AudioEncoder _audioEncoder = new AudioEncoder();
+        private IOpusEncoder? _opusEncoder;
+        private IOpusDecoder? _opusDecoder;
+        private const int OPUS_FRAME_SIZE = 960; // 20ms при 48kHz
         private readonly List<RTCIceCandidateInit> _pendingCandidates = new();
         private bool _remoteDescriptionSet;
         private bool _isRelayMode;
-
+        private readonly Queue<short> _pcmBuffer = new();
         public bool IsCallActive { get; private set; }
 
         public event EventHandler? OnCallConnected;
@@ -32,7 +38,6 @@ namespace Sup.Services
         public event EventHandler<SignalingCandidateEventArgs>? OnIceCandidateReady;
         public event EventHandler<byte[]>? OnRelayAudioReady;
 
-        // Инициирует исходящий звонок
         public async Task<bool> InitiateCallAsync(int micWasapiIndex, int speakerWasapiIndex)
         {
             Console.WriteLine($"[VoiceCallService.InitiateCallAsync] mic={micWasapiIndex} speaker={speakerWasapiIndex}");
@@ -53,7 +58,6 @@ namespace Sup.Services
             }
         }
 
-        // Обрабатывает входящий Offer и создаёт Answer
         public async Task HandleOfferAsync(string sdp, int micWasapiIndex, int speakerWasapiIndex)
         {
             Console.WriteLine($"[VoiceCallService.HandleOfferAsync] mic={micWasapiIndex} speaker={speakerWasapiIndex} SDP_длина={sdp.Length}");
@@ -78,7 +82,6 @@ namespace Sup.Services
             }
         }
 
-        // Устанавливает удалённый Answer
         public Task HandleAnswerAsync(string sdp)
         {
             Console.WriteLine($"[VoiceCallService.HandleAnswerAsync] SDP_длина={sdp.Length}");
@@ -102,7 +105,6 @@ namespace Sup.Services
             return Task.CompletedTask;
         }
 
-        // Добавляет ICE-кандидата (или ставит в очередь до setRemoteDescription)
         public Task HandleIceCandidateAsync(string candidate, string sdpMid, int sdpMLineIndex)
         {
             Console.WriteLine($"[VoiceCallService.HandleIceCandidateAsync] mid={sdpMid} idx={sdpMLineIndex}");
@@ -125,10 +127,8 @@ namespace Sup.Services
             return Task.CompletedTask;
         }
 
-        // Завершает звонок и освобождает ресурсы
         public Task HangUpAsync()
         {
-            // Защита от повторного входа (onconnectionstatechange может вызвать нас повторно)
             if (!IsCallActive && _peerConnection == null)
             {
                 Console.WriteLine("[VoiceCallService.HangUpAsync] Уже завершён, пропуск");
@@ -142,27 +142,22 @@ namespace Sup.Services
             _isRelayMode = false;
             _pendingCandidates.Clear();
 
-            try { _capture?.StopRecording(); } catch (Exception ex) { Console.WriteLine($"[VoiceCallService.HangUpAsync] StopRecording: {ex.Message}"); }
-            try { _capture?.Dispose(); } catch (Exception ex) { Console.WriteLine($"[VoiceCallService.HangUpAsync] Capture Dispose: {ex.Message}"); }
+            try { _capture?.StopRecording(); } catch { }
+            _pcmBuffer?.Clear(); // ← очистка буфера PCM
+            try { _capture?.Dispose(); } catch { }
             _capture = null;
 
-            try { _playback?.Stop(); } catch (Exception ex) { Console.WriteLine($"[VoiceCallService.HangUpAsync] Playback Stop: {ex.Message}"); }
-            try { _playback?.Dispose(); } catch (Exception ex) { Console.WriteLine($"[VoiceCallService.HangUpAsync] Playback Dispose: {ex.Message}"); }
+            try { _playback?.Stop(); } catch { }
+            try { _playback?.Dispose(); } catch { }
             _playback = null;
             _playbackBuffer = null;
 
-            // Захватываем в локальную переменную и сразу обнуляем поле —
-            // это предотвращает NPE при реентрантном вызове из onconnectionstatechange
             var pc = _peerConnection;
             _peerConnection = null;
             if (pc != null)
             {
-                try
-                {
-                    pc.Close("hangup");
-                    pc.Dispose();
-                }
-                catch (Exception ex) { Console.WriteLine($"[VoiceCallService.HangUpAsync] PC Close/Dispose: {ex.Message}"); }
+                try { pc.Close("hangup"); } catch { }
+                try { pc.Dispose(); } catch { }
             }
 
             Console.WriteLine("[VoiceCallService.HangUpAsync] Завершено");
@@ -176,14 +171,12 @@ namespace Sup.Services
             HangUpAsync().GetAwaiter().GetResult();
         }
 
-        // Воспроизводит аудио-пакет G.711, полученный через WebSocket-ретрансляцию
         public void ReceiveRelayAudio(byte[] encodedG711)
         {
             if (_isRelayMode && _hasNegotiatedFormat)
                 PlayDecodedAudio(encodedG711);
         }
 
-        // Создаёт RTCPeerConnection с STUN-серверами и аудиотреком
         private RTCPeerConnection CreatePeerConnection(int micWasapiIndex, int speakerWasapiIndex)
         {
             Console.WriteLine("[VoiceCallService.CreatePeerConnection] Создание PeerConnection");
@@ -193,48 +186,35 @@ namespace Sup.Services
                 {
                     new RTCIceServer { urls = "stun:stun.cloudflare.com:3478" },
                     new RTCIceServer { urls = "stun:stun.l.google.com:19302" },
-                    // Бесплатные публичные TURN-серверы (для разработки; в продакшене — свой coturn)
-                    new RTCIceServer
-                    {
-                        urls = "turn:freestun.net:3478",
-                        username = "free",
-                        credential = "free"
-                    },
-                    new RTCIceServer
-                    {
-                        urls = "turns:freestun.net:5350",
-                        username = "free",
-                        credential = "free"
-                    },
-                    new RTCIceServer
-                    {
-                        urls = "turn:openrelay.metered.ca:80",
-                        username = "openrelayproject",
-                        credential = "openrelayproject"
-                    },
-                    new RTCIceServer
-                    {
-                        urls = "turn:openrelay.metered.ca:443?transport=tcp",
-                        username = "openrelayproject",
-                        credential = "openrelayproject"
-                    }
+                    new RTCIceServer { urls = "turn:freestun.net:3478", username = "free", credential = "free" },
+                    new RTCIceServer { urls = "turns:freestun.net:5350", username = "free", credential = "free" },
+                    new RTCIceServer { urls = "turn:openrelay.metered.ca:80", username = "openrelayproject", credential = "openrelayproject" },
+                    new RTCIceServer { urls = "turn:openrelay.metered.ca:443?transport=tcp", username = "openrelayproject", credential = "openrelayproject" }
                 }
             };
 
             var pc = new RTCPeerConnection(config);
 
-            var audioTrack = new MediaStreamTrack(
-                new AudioFormat(SDPWellKnownMediaFormatsEnum.PCMU),
-                MediaStreamStatusEnum.SendRecv);
+            // Моно 48 kHz (типично для голоса)
+            var opusFormat = new AudioFormat(96, "opus", 48000, 1);
+            var audioTrack = new MediaStreamTrack(opusFormat, MediaStreamStatusEnum.SendRecv);
             pc.addTrack(audioTrack);
-            Console.WriteLine("[VoiceCallService.CreatePeerConnection] Аудиотрек PCMU добавлен");
+            Console.WriteLine("[VoiceCallService.CreatePeerConnection] OPUS 48 kHz (моно)");
 
             pc.OnAudioFormatsNegotiated += (formats) =>
             {
                 _negotiatedFormat = formats.FirstOrDefault();
                 _hasNegotiatedFormat = true;
                 Console.WriteLine($"[VoiceCallService] Аудиоформат согласован: {_negotiatedFormat.FormatName} (PT={_negotiatedFormat.FormatID})");
-                    Console.WriteLine("[VoiceCallService] ✅ Opus моно кодеры инициализированы (64 kbps)");
+
+                if (_negotiatedFormat.FormatName.Contains("opus", StringComparison.OrdinalIgnoreCase))
+                {
+                    _opusEncoder = OpusCodecFactory.CreateEncoder(48000, 1, OpusApplication.OPUS_APPLICATION_AUDIO);
+                    _opusEncoder.Bitrate = 64000; // 64 kbps для моно голоса
+                    _opusDecoder = OpusCodecFactory.CreateDecoder(48000, 1);
+                    Console.WriteLine("[VoiceCallService] Opus моно кодеры инициализированы (64 kbps)");
+                }
+
                 StartAudio(pc, micWasapiIndex, speakerWasapiIndex);
             };
 
@@ -256,10 +236,7 @@ namespace Sup.Services
                         SdpMLineIndex = (int)(candidate.sdpMLineIndex)
                     });
                 }
-                else
-                {
-                    Console.WriteLine("[VoiceCallService] ICE-кандидаты завершены (null)");
-                }
+                else Console.WriteLine("[VoiceCallService] ICE-кандидаты завершены (null)");
             };
 
             pc.onconnectionstatechange += async (state) =>
@@ -272,14 +249,12 @@ namespace Sup.Services
                 }
                 else if (state == RTCPeerConnectionState.failed)
                 {
-                    // ICE не смог пробить NAT — переключаемся на WebSocket-ретрансляцию
                     Console.WriteLine("[VoiceCallService] ICE не удалось — активируем WebSocket-ретрансляцию");
                     _isRelayMode = true;
                     var failedPc = _peerConnection;
                     _peerConnection = null;
                     try { failedPc?.Close("relay"); } catch { }
                     try { failedPc?.Dispose(); } catch { }
-                    // Сообщаем UI что звонок «подключён» (через релей)
                     OnCallConnected?.Invoke(this, EventArgs.Empty);
                 }
                 else if (state == RTCPeerConnectionState.closed && !_isRelayMode)
@@ -289,16 +264,12 @@ namespace Sup.Services
                 }
             };
 
-            pc.oniceconnectionstatechange += (state) =>
-            {
-                Console.WriteLine($"[VoiceCallService] ICE-состояние: {state}");
-            };
+            pc.oniceconnectionstatechange += (state) => Console.WriteLine($"[VoiceCallService] ICE-состояние: {state}");
 
             Console.WriteLine("[VoiceCallService.CreatePeerConnection] PeerConnection готов");
             return pc;
         }
 
-        // Запускает WASAPI-захват микрофона и воспроизведение через динамик
         private void StartAudio(RTCPeerConnection pc, int micWasapiIndex, int speakerWasapiIndex)
         {
             Console.WriteLine($"[VoiceCallService.StartAudio] Запуск аудио: mic={micWasapiIndex} speaker={speakerWasapiIndex}");
@@ -307,8 +278,6 @@ namespace Sup.Services
                 var enumerator = new MMDeviceEnumerator();
                 var captureDevices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active).ToArray();
                 var renderDevices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active).ToArray();
-
-                Console.WriteLine($"[VoiceCallService.StartAudio] Устройства захвата: {captureDevices.Length}, вывода: {renderDevices.Length}");
 
                 var micDevice = micWasapiIndex >= 0 && micWasapiIndex < captureDevices.Length
                     ? captureDevices[micWasapiIndex]
@@ -320,27 +289,26 @@ namespace Sup.Services
                     : enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
                 Console.WriteLine($"[VoiceCallService.StartAudio] Динамик: {speakerDevice.FriendlyName}");
 
-                // Воспроизведение: буфер 8kHz 16-bit mono → ресэмплинг до 48kHz float stereo
-                _playbackBuffer = new BufferedWaveProvider(new WaveFormat(8000, 16, 1))
+                // Воспроизведение: стерео буфер (для дублирования моно)
+                _playbackBuffer = new BufferedWaveProvider(new WaveFormat(48000, 16, 2))
                 {
-                    BufferLength = 65536,
+                    BufferLength = 131072,
                     DiscardOnBufferOverflow = true
                 };
-                var resampler = new MediaFoundationResampler(_playbackBuffer,
-                    WaveFormat.CreateIeeeFloatWaveFormat(48000, 2))
-                { ResamplerQuality = 60 };
 
                 _playback = new WasapiOut(speakerDevice, AudioClientShareMode.Shared, false, 20);
-                _playback.Init(resampler);
+                _playback.Init(_playbackBuffer);
                 _playback.Play();
-                Console.WriteLine("[VoiceCallService.StartAudio] Воспроизведение запущено");
+                Console.WriteLine("[VoiceCallService.StartAudio] Воспроизведение запущено (стерео 48 kHz)");
 
-                // Захват: WASAPI → конвертируем в 8kHz 16-bit mono → кодируем G.711
-                _capture = new WasapiCapture(micDevice);
+                // Захват: моно 48 kHz 16 bit
+                var captureFormat = new WaveFormat(48000, 16, 1);
+                _capture = new WasapiCapture(micDevice, false, 20);
+                try { _capture.WaveFormat = captureFormat; } catch { /* устройство может не поддерживать, тогда оставим родной формат */ }
                 Console.WriteLine($"[VoiceCallService.StartAudio] Формат захвата: {_capture.WaveFormat}");
                 _capture.DataAvailable += (s, e) => OnCaptureData(e.Buffer, e.BytesRecorded, _capture.WaveFormat, pc);
                 _capture.StartRecording();
-                Console.WriteLine("[VoiceCallService.StartAudio] Захват запущен");
+                Console.WriteLine("[VoiceCallService.StartAudio] Захват запущен (моно)");
             }
             catch (Exception ex)
             {
@@ -348,20 +316,43 @@ namespace Sup.Services
             }
         }
 
-        // Конвертирует PCM из WASAPI → 8kHz 16-bit mono, кодирует G.711 и отправляет
-        private void OnCaptureData(byte[] buffer, int bytesRecorded, WaveFormat srcFormat, RTCPeerConnection pc)
+        private void OnCaptureData(byte[] buffer, int bytesRecorded, WaveFormat fmt, RTCPeerConnection pc)
         {
             if (!IsCallActive || !_hasNegotiatedFormat) return;
             try
             {
-                var pcm8k = ConvertToMono8KHz16Bit(buffer, bytesRecorded, srcFormat);
-                if (pcm8k.Length == 0) return;
+                short[] pcmMono = GetMono48kHzShorts(buffer, bytesRecorded, fmt);
+                if (pcmMono.Length == 0) return;
 
-                var encoded = _audioEncoder.EncodeAudio(pcm8k, _negotiatedFormat);
-                if (_isRelayMode)
-                    OnRelayAudioReady?.Invoke(this, encoded);
-                else
-                    pc.SendAudio((uint)pcm8k.Length, encoded);
+                // Накапливаем сэмплы в очередь
+                foreach (var sample in pcmMono)
+                    _pcmBuffer.Enqueue(sample);
+
+                // Кодируем пока есть хотя бы один полный фрейм
+                while (_pcmBuffer.Count >= OPUS_FRAME_SIZE)
+                {
+                    short[] frame = new short[OPUS_FRAME_SIZE];
+                    for (int i = 0; i < OPUS_FRAME_SIZE; i++)
+                        frame[i] = _pcmBuffer.Dequeue();
+
+                    byte[] encoded;
+                    if (_opusEncoder != null)
+                    {
+                        var packet = new byte[4000];
+                        int packetSize = _opusEncoder.Encode(frame.AsSpan(), OPUS_FRAME_SIZE, packet, packet.Length);
+                        encoded = new byte[packetSize];
+                        Array.Copy(packet, encoded, packetSize);
+                    }
+                    else
+                    {
+                        encoded = _audioEncoder.EncodeAudio(frame, _negotiatedFormat);
+                    }
+
+                    if (_isRelayMode)
+                        OnRelayAudioReady?.Invoke(this, encoded);
+                    else
+                        pc.SendAudio((uint)OPUS_FRAME_SIZE, encoded);
+                }
             }
             catch (Exception ex)
             {
@@ -369,17 +360,37 @@ namespace Sup.Services
             }
         }
 
-        // Декодирует входящий RTP-пакет G.711 и добавляет в буфер воспроизведения
         private void PlayDecodedAudio(byte[] payload)
         {
             if (!_hasNegotiatedFormat) return;
             try
             {
-                var pcm16 = _audioEncoder.DecodeAudio(payload, _negotiatedFormat);
-                if (pcm16 == null || pcm16.Length == 0) return;
+                short[] pcmMono;
+                if (_opusDecoder != null)
+                {
+                    pcmMono = new short[OPUS_FRAME_SIZE];
+                    int samplesDecoded = _opusDecoder.Decode(payload, pcmMono.AsSpan(), OPUS_FRAME_SIZE, false);
+                    if (samplesDecoded < OPUS_FRAME_SIZE)
+                        pcmMono = pcmMono.Take(samplesDecoded).ToArray();
+                }
+                else
+                {
+                    pcmMono = _audioEncoder.DecodeAudio(payload, _negotiatedFormat);
+                }
 
-                var bytes = new byte[pcm16.Length * 2];
-                Buffer.BlockCopy(pcm16, 0, bytes, 0, bytes.Length);
+                if (pcmMono == null || pcmMono.Length == 0) return;
+
+                // Дублируем моно в стерео (для обоих динамиков)
+                short[] pcmStereo = new short[pcmMono.Length * 2];
+                for (int i = 0; i < pcmMono.Length; i++)
+                {
+                    short sample = pcmMono[i];
+                    pcmStereo[i * 2] = sample;
+                    pcmStereo[i * 2 + 1] = sample;
+                }
+
+                var bytes = new byte[pcmStereo.Length * 2];
+                Buffer.BlockCopy(pcmStereo, 0, bytes, 0, bytes.Length);
                 _playbackBuffer?.AddSamples(bytes, 0, bytes.Length);
             }
             catch (Exception ex)
@@ -388,77 +399,42 @@ namespace Sup.Services
             }
         }
 
-        // Применяет накопленные ICE-кандидаты после setRemoteDescription
+        // Быстрое преобразование любых входных данных в моно 48kHz 16bit
+        private static short[] GetMono48kHzShorts(byte[] buffer, int bytesRecorded, WaveFormat fmt)
+        {
+            // Если формат уже подходящий — просто копируем
+            if (fmt.SampleRate == 48000 && fmt.Channels == 1 && fmt.Encoding == WaveFormatEncoding.Pcm && fmt.BitsPerSample == 16)
+            {
+                short[] samples = new short[bytesRecorded / 2];
+                Buffer.BlockCopy(buffer, 0, samples, 0, bytesRecorded);
+                return samples;
+            }
+
+            // Иначе используем MediaFoundationResampler (быстро, качественно)
+            using (var rawStream = new RawSourceWaveStream(buffer, 0, bytesRecorded, fmt))
+            using (var resampler = new MediaFoundationResampler(rawStream, new WaveFormat(48000, 16, 1)))
+            {
+                resampler.ResamplerQuality = 60;
+                var outStream = new MemoryStream();
+                byte[] resampledData = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = resampler.Read(resampledData, 0, resampledData.Length)) > 0)
+                {
+                    outStream.Write(resampledData, 0, bytesRead);
+                }
+                byte[] finalBytes = outStream.ToArray();
+                short[] finalSamples = new short[finalBytes.Length / 2];
+                Buffer.BlockCopy(finalBytes, 0, finalSamples, 0, finalBytes.Length);
+                return finalSamples;
+            }
+        }
+
         private void FlushPendingCandidates()
         {
             Console.WriteLine($"[VoiceCallService.FlushPendingCandidates] Применяем {_pendingCandidates.Count} кандидатов");
             foreach (var c in _pendingCandidates)
                 _peerConnection?.addIceCandidate(c);
             _pendingCandidates.Clear();
-        }
-
-        // Конвертирует буфер WASAPI (любой формат) в 8kHz 16-bit PCM mono
-        private static short[] ConvertToMono8KHz16Bit(byte[] buffer, int bytesRecorded, WaveFormat fmt)
-        {
-            // Шаг 1: нормализуем в 16-bit PCM (из float32 или int16)
-            short[] sourceSamples;
-            if (fmt.Encoding == WaveFormatEncoding.IeeeFloat && fmt.BitsPerSample == 32)
-            {
-                int count = bytesRecorded / 4;
-                sourceSamples = new short[count];
-                for (int i = 0; i < count; i++)
-                {
-                    float f = BitConverter.ToSingle(buffer, i * 4);
-                    sourceSamples[i] = (short)Math.Clamp((int)(f * 32767f), -32768, 32767);
-                }
-            }
-            else if (fmt.Encoding == WaveFormatEncoding.Pcm && fmt.BitsPerSample == 16)
-            {
-                sourceSamples = new short[bytesRecorded / 2];
-                Buffer.BlockCopy(buffer, 0, sourceSamples, 0, bytesRecorded);
-            }
-            else
-            {
-                Console.WriteLine($"[ConvertToMono8KHz16Bit] Неподдерживаемый формат: {fmt.Encoding} {fmt.BitsPerSample}bit");
-                return Array.Empty<short>();
-            }
-
-            // Шаг 2: микшируем в моно
-            int channels = fmt.Channels;
-            short[] monoSamples;
-            if (channels > 1)
-            {
-                monoSamples = new short[sourceSamples.Length / channels];
-                for (int i = 0; i < monoSamples.Length; i++)
-                {
-                    long sum = 0;
-                    for (int ch = 0; ch < channels; ch++)
-                        sum += sourceSamples[i * channels + ch];
-                    monoSamples[i] = (short)(sum / channels);
-                }
-            }
-            else
-            {
-                monoSamples = sourceSamples;
-            }
-
-            // Шаг 3: ресэмплинг до 8kHz (линейная интерполяция)
-            int srcRate = fmt.SampleRate;
-            if (srcRate == 8000)
-                return monoSamples;
-
-            double ratio = 8000.0 / srcRate;
-            int outLen = (int)(monoSamples.Length * ratio);
-            var result = new short[outLen];
-            for (int i = 0; i < outLen; i++)
-            {
-                double srcIdx = i / ratio;
-                int idx0 = (int)srcIdx;
-                int idx1 = Math.Min(idx0 + 1, monoSamples.Length - 1);
-                double frac = srcIdx - idx0;
-                result[i] = (short)(monoSamples[idx0] * (1 - frac) + monoSamples[idx1] * frac);
-            }
-            return result;
         }
     }
 }
