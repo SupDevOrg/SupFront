@@ -10,7 +10,11 @@ namespace Sup.Services
         Task<List<ChatDto>> GetUserChatsAsync();
         Task<List<ChatDto>> LoadChatDetailsAsync(List<ChatInfoDto> chatInfos);
         Task<uint?> CreateChatAsync(uint otherUserId);
+        Task<uint?> CreateGroupChatAsync(IEnumerable<uint> memberIds);
         Task<uint> GetOtherUserIdForChat(uint chatId);
+        Task<List<ChatParticipantDto>> GetChatMembersAsync(uint chatId);
+        Task<List<ChatParticipantDto>> GetChatParticipantsAsync(uint chatId);
+        Task<bool> AddUsersToChatAsync(uint chatId, IEnumerable<uint> userIds);
         Task<List<MessageDto>> LoadChatHistoryAsync(uint chatId, int page = 1, int pageSize = 20);
         Task<MessageDto?> SendMessageAsync(uint chatId, string content);
         Task<string?> GetUserNameByIdAsync(uint userId);

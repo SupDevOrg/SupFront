@@ -20,7 +20,7 @@ namespace Sup.Services
         public event EventHandler<WebSocketMessageEventArgs>? OnMessageReceived;
         public event EventHandler<Exception>? OnError;
 
-        public async Task<bool> OpenAsync(uint chatId, uint currentUserId, uint otherUserId)
+        public async Task<bool> OpenAsync(uint chatId, uint currentUserId)
         {
             Close();
 

@@ -5,7 +5,7 @@ namespace Sup.Services
 {
     public interface IWebSocketService
     {
-        Task<bool> OpenAsync(uint chatId, uint currentUserId, uint otherUserId);
+        Task<bool> OpenAsync(uint chatId, uint currentUserId);
         Task<bool> SendAsync(string message);
         void Close();
         

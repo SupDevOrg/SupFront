@@ -1,5 +1,5 @@
-using Sup.Models;
 using Sup.ForTokens;
+using Sup.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,14 +14,17 @@ namespace Sup.Services
     {
         private readonly HttpClient _httpClient;
         private readonly string _messageServiceBaseUrl = $"{App.ApiBaseUrl}message";
+        private readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
 
-        // Состояние и кэши, которые ранее были в MainChatWindow
         private uint _currentUserId = 0;
-        private List<ChatDto> _userChats = new List<ChatDto>();
-        private Dictionary<uint, string> _userNameCache = new Dictionary<uint, string>();
-        private Dictionary<uint, ChatDto> _pendingChats = new Dictionary<uint, ChatDto>();
-        private Dictionary<uint, uint> _chatToOtherUserIdCache = new Dictionary<uint, uint>();
-        private List<uint> _lastChatIds = new List<uint>();
+        private List<ChatDto> _userChats = new();
+        private readonly Dictionary<uint, string> _userNameCache = new();
+        private readonly Dictionary<uint, uint> _chatToOtherUserIdCache = new();
+        private readonly Dictionary<uint, List<ChatParticipantDto>> _chatParticipantsCache = new();
+        private List<uint> _lastChatIds = new();
 
         public ChatService(HttpClient? httpClient = null)
         {
@@ -37,12 +40,10 @@ namespace Sup.Services
 
             _currentUserId = await GetUserIdByNameAsync(username) ?? 0;
             if (_currentUserId > 0)
-            {
                 _userNameCache[_currentUserId] = username;
-            }
 
-            // Предварительно загружаем чаты
             _userChats = await GetUserChatsAsync();
+            _lastChatIds = _userChats.Select(c => c.Id).ToList();
             return _currentUserId;
         }
 
@@ -59,11 +60,12 @@ namespace Sup.Services
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            var chatsResponse = JsonSerializer.Deserialize<GetUserChatsResponse>(responseContent);
+            var chatsResponse = JsonSerializer.Deserialize<GetUserChatsResponse>(responseContent, _jsonOptions);
             if (chatsResponse?.Chats == null)
                 return new List<ChatDto>();
 
             _userChats = await LoadChatDetailsAsync(chatsResponse.Chats);
+            _lastChatIds = _userChats.Select(c => c.Id).ToList();
             return _userChats;
         }
 
@@ -75,83 +77,79 @@ namespace Sup.Services
             {
                 try
                 {
+                    var lastMessage = !string.IsNullOrWhiteSpace(chatInfo.LastMessage)
+                        ? TrimMessage(chatInfo.LastMessage)
+                        : "Нет сообщений";
+                    var lastMessageTime = chatInfo.LastMessageTime != default ? chatInfo.LastMessageTime : DateTime.Now;
+                    var participants = new List<ChatParticipantDto>();
                     uint otherUserId = 0;
-                    string userName = chatInfo.Name ?? $"Чат {chatInfo.Id}";
-                    string lastMessage = "Нет сообщений";
-                    DateTime lastMessageTime = DateTime.Now;
 
-                    if (!_chatToOtherUserIdCache.TryGetValue(chatInfo.Id, out otherUserId))
+                    var messages = await LoadChatHistoryAsync(chatInfo.Id, 1, 20);
+                    if (messages.Count > 0)
                     {
-                        otherUserId = await GetChatInfoAsync(chatInfo.Id) ?? 0;
-                        if (otherUserId > 0)
-                            _chatToOtherUserIdCache[chatInfo.Id] = otherUserId;
-                    }
+                        var lastMsg = messages.OrderByDescending(m => m.CreatedAt).First();
+                        lastMessage = TrimMessage(lastMsg.Content);
+                        lastMessageTime = lastMsg.CreatedAt;
 
-                    var url = $"{_messageServiceBaseUrl}/messages/{chatInfo.Id}?page=1&page_size=20";
-                    var response = await SendWithUserHeaderAsync(HttpMethod.Get, url);
-
-                    if (response.IsSuccessStatusCode)
-                    {
-                        var content = await response.Content.ReadAsStringAsync();
-                        var messagesResponse = JsonSerializer.Deserialize<MessagesResponse>(content);
-
-                        if (messagesResponse?.Messages != null && messagesResponse.Messages.Count > 0)
+                        if (!chatInfo.IsGroup && !_chatToOtherUserIdCache.TryGetValue(chatInfo.Id, out otherUserId))
                         {
-                            Console.WriteLine($"[LoadChatDetailsAsync] Чат {chatInfo.Id} - найдено {messagesResponse.Messages.Count} сообщений");
-                            
-                            // Находим последнее сообщение (по CreatedAt)
-                            var lastMsg = messagesResponse.Messages.OrderByDescending(m => m.CreatedAt).First();
-                            lastMessage = lastMsg.Content.Length > 50 ? lastMsg.Content.Substring(0, 50) + "..." : lastMsg.Content;
-                            lastMessageTime = lastMsg.CreatedAt;
-                            
-                            if (otherUserId == 0)
-                            {
-                                var allSenderIds = messagesResponse.Messages.Select(m => m.SenderId).Distinct().ToList();
-                                otherUserId = allSenderIds.FirstOrDefault(id => id != _currentUserId);
+                            otherUserId = messages
+                                .Select(m => m.SenderId)
+                                .Distinct()
+                                .FirstOrDefault(id => id != _currentUserId);
 
-                                if (otherUserId > 0)
-                                {
-                                    _chatToOtherUserIdCache[chatInfo.Id] = otherUserId;
-                                    Console.WriteLine($"[LoadChatDetailsAsync] Определили otherUserId из сообщений для чата {chatInfo.Id}: {otherUserId}");
-                                }
-                            }
+                            if (otherUserId > 0)
+                                _chatToOtherUserIdCache[chatInfo.Id] = otherUserId;
                         }
                     }
 
-                    // Используем имя из ответа service сообщений если доступно
-                    if (!string.IsNullOrEmpty(chatInfo.Name))
+                    if (chatInfo.IsGroup)
                     {
-                        userName = chatInfo.Name;
-                        // Стараемся кэшировать имя пользователя
-                        if (otherUserId > 0)
+                        participants = await GetChatParticipantsAsync(chatInfo.Id);
+                    }
+                    else
+                    {
+                        if (!_chatToOtherUserIdCache.TryGetValue(chatInfo.Id, out otherUserId))
                         {
-                            _userNameCache[otherUserId] = userName;
+                            otherUserId = await GetChatInfoAsync(chatInfo.Id) ?? 0;
+                            if (otherUserId > 0)
+                                _chatToOtherUserIdCache[chatInfo.Id] = otherUserId;
                         }
                     }
 
-                    // Если у нас всё ещё нет правильного имени, пытаемся его загрузить
-                    if (string.IsNullOrEmpty(userName) || userName.StartsWith("Чат "))
+                    var chatName = chatInfo.Name;
+                    if (chatInfo.IsGroup)
                     {
-                        if (otherUserId > 0)
+                        chatName = !string.IsNullOrWhiteSpace(chatName)
+                            ? chatName
+                            : BuildGroupDisplayName(participants);
+                    }
+                    else
+                    {
+                        if (!string.IsNullOrWhiteSpace(chatName) && otherUserId > 0)
                         {
-                            var loaded = await GetUserNameByIdAsync(otherUserId);
-                            if (!string.IsNullOrEmpty(loaded))
-                            {
-                                userName = loaded;
-                            }
+                            _userNameCache[otherUserId] = chatName;
+                        }
+                        else if (otherUserId > 0)
+                        {
+                            chatName = await GetUserNameByIdAsync(otherUserId) ?? $"Чат {chatInfo.Id}";
+                        }
+                        else
+                        {
+                            chatName = $"Чат {chatInfo.Id}";
                         }
                     }
 
                     validChats.Add(new ChatDto
                     {
                         Id = chatInfo.Id,
-                        Name = userName,
+                        Name = chatName,
                         LastMessage = lastMessage,
                         LastMessageTime = lastMessageTime,
-                        OtherUserId = otherUserId
+                        OtherUserId = chatInfo.IsGroup ? 0 : otherUserId,
+                        IsGroup = chatInfo.IsGroup,
+                        Participants = CloneParticipants(participants)
                     });
-                    
-                    Console.WriteLine($"[LoadChatDetailsAsync] Добавлен чат {chatInfo.Id}: Name='{userName}', LastMessage='{lastMessage}', OtherUserId={otherUserId}");
                 }
                 catch (Exception ex)
                 {
@@ -159,217 +157,36 @@ namespace Sup.Services
                 }
             }
 
-            Console.WriteLine($"[LoadChatDetailsAsync] Загружено всего чатов: {validChats.Count}");
             return validChats;
-        }
-
-        private async Task<uint?> GetChatInfoAsync(uint chatId)
-        {
-            try
-            {
-                var url = $"{_messageServiceBaseUrl}/chats/{chatId}/members";
-                Console.WriteLine($"[GetChatInfoAsync] Запрашиваем участников чата {chatId}: {url}");
-                var response = await SendWithUserHeaderAsync(HttpMethod.Get, url);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    Console.WriteLine($"[GetChatInfoAsync] GET {url} -> {response.StatusCode}");
-                    return null;
-                }
-
-                var content = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"[GetChatInfoAsync] Успешно получены участники чата {chatId}");
-
-                using var doc = JsonDocument.Parse(content);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("members", out var membersElem) && membersElem.ValueKind == JsonValueKind.Array)
-                {
-                    var otherUserId = FindOtherUserIdFromMembers(membersElem);
-                    if (otherUserId > 0)
-                        return otherUserId;
-                }
-
-                Console.WriteLine($"[GetChatInfoAsync] Поле members не найдено или не содержит другого пользователя для чата {chatId}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[GetChatInfoAsync] Ошибка при получении участников чата {chatId}: {ex.Message}");
-            }
-
-            return null;
-        }
-
-        private uint FindOtherUserIdFromMembers(JsonElement membersArray)
-        {
-            try
-            {
-                int memberCount = 0;
-                foreach (var member in membersArray.EnumerateArray())
-                {
-                    memberCount++;
-                    uint memberId = 0;
-                    
-                    // Пытаемся найти ID участника
-                    if (member.TryGetProperty("id", out var idElem))
-                        memberId = idElem.GetUInt32();
-                    else if (member.TryGetProperty("user_id", out var userIdElem))
-                        memberId = userIdElem.GetUInt32();
-                    else if (member.TryGetProperty("userId", out var userIdElem2))
-                        memberId = userIdElem2.GetUInt32();
-                    else if (member.ValueKind == System.Text.Json.JsonValueKind.Number)
-                        memberId = member.GetUInt32();
-
-                    Console.WriteLine($"[FindOtherUserIdFromMembers] Участник #{memberCount}: memberId={memberId}, currentUserId={_currentUserId}");
-
-                    // Если это не текущий пользователь, вернули его ID
-                    if (memberId > 0 && memberId != _currentUserId)
-                    {
-                        Console.WriteLine($"[FindOtherUserIdFromMembers] Выбран другой пользователь: {memberId}");
-                        return memberId;
-                    }
-                }
-                Console.WriteLine($"[FindOtherUserIdFromMembers] Всего участников: {memberCount}, других пользователей не найдено");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[FindOtherUserIdFromMembers] Ошибка парсинга: {ex.Message}");
-            }
-
-            return 0;
-        }
-
-        public async Task<string?> GetUserNameByIdAsync(uint userId)
-        {
-            if (_userNameCache.TryGetValue(userId, out var cached))
-                return cached;
-
-            try
-            {
-                var url = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(userId.ToString())}?page=0&size=100";
-                var response = await _httpClient.GetAsync(url);
-                if (response.IsSuccessStatusCode)
-                {
-                    using var stream = await response.Content.ReadAsStreamAsync();
-                    var resp = await JsonSerializer.DeserializeAsync<SearchUsersResponse>(stream);
-                    var user = resp?.Users?.FirstOrDefault(u => u.Id == userId);
-                    if (user != null)
-                    {
-                        _userNameCache[userId] = user.Username;
-                        return user.Username;
-                    }
-                }
-
-                // Агрессивный поиск
-                var searchTerms = "abcdefghijklmnopqrstuvwxyz0123456789".Select(c => c.ToString());
-                var tasks = searchTerms.Select(async term =>
-                {
-                    try
-                    {
-                        url = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(term)}?page=0&size=1000";
-                        var resp2 = await _httpClient.GetAsync(url);
-                        if (resp2.IsSuccessStatusCode)
-                        {
-                            using var stream2 = await resp2.Content.ReadAsStreamAsync();
-                            var sr = await JsonSerializer.DeserializeAsync<SearchUsersResponse>(stream2);
-                            return sr?.Users?.FirstOrDefault(u => u.Id == userId);
-                        }
-                    }
-                    catch { }
-                    return null;
-                });
-
-                var results = await Task.WhenAll(tasks);
-                var found = results.FirstOrDefault(u => u != null);
-                if (found != null)
-                {
-                    _userNameCache[userId] = found.Username;
-                    return found.Username;
-                }
-            }
-            catch { }
-
-            return null;
-        }
-
-        public async Task<uint?> GetUserIdByNameAsync(string name)
-        {
-            try
-            {
-                var url = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(name)}?page=0&size=8";
-                var resp = await _httpClient.GetAsync(url);
-                if (!resp.IsSuccessStatusCode) return null;
-                using var stream = await resp.Content.ReadAsStreamAsync();
-                var result = await JsonSerializer.DeserializeAsync<SearchUsersResponse>(stream);
-                var user = result?.Users?.FirstOrDefault(u => u.Username == name);
-                return user?.Id != null ? (uint?)user.Id : null;
-            }
-            catch { return null; }
         }
 
         public async Task<uint?> CreateChatAsync(uint otherUserId)
         {
             try
             {
-                if (_currentUserId == 0)
-                {
-                    Console.WriteLine("[ChatService.CreateChatAsync] currentUserId=0, чат не может быть создан");
+                if (_currentUserId == 0 || otherUserId == 0)
                     return null;
-                }
 
-                if (otherUserId == 0)
-                {
-                    Console.WriteLine("[ChatService.CreateChatAsync] otherUserId=0, чат не может быть создан");
-                    return null;
-                }
-
-                var req = new { user_id = otherUserId };
-                var json = JsonSerializer.Serialize(req);
+                var json = JsonSerializer.Serialize(new { user_id = otherUserId }, _jsonOptions);
                 var url = $"{_messageServiceBaseUrl}/chats";
-                Console.WriteLine($"[ChatService.CreateChatAsync] POST {url} payload={json}");
+                var resp = await SendWithUserHeaderAsync(
+                    HttpMethod.Post,
+                    url,
+                    new StringContent(json, Encoding.UTF8, "application/json"));
 
-                var resp = await SendWithUserHeaderAsync(HttpMethod.Post, url, new StringContent(json, Encoding.UTF8, "application/json"));
                 if (!resp.IsSuccessStatusCode)
                 {
                     var errorBody = await resp.Content.ReadAsStringAsync();
-                    Console.WriteLine($"[ChatService.CreateChatAsync] POST {url} -> {resp.StatusCode}. Body(первые 300): {errorBody.Substring(0, Math.Min(300, errorBody.Length))}");
+                    Console.WriteLine($"[ChatService.CreateChatAsync] POST {url} -> {resp.StatusCode}. Body: {errorBody}");
                     return null;
                 }
 
                 var respJson = await resp.Content.ReadAsStringAsync();
-                Console.WriteLine($"[ChatService.CreateChatAsync] POST {url} -> OK. Body: {respJson.Substring(0, Math.Min(300, respJson.Length))}");
+                using var doc = JsonDocument.Parse(respJson);
+                if (TryExtractChatId(doc.RootElement, out var chatId))
+                    return chatId;
 
-                using var d = JsonDocument.Parse(respJson);
-                var root = d.RootElement;
-
-                if (root.TryGetProperty("chat_id", out var chatIdElem))
-                {
-                    if (chatIdElem.ValueKind == JsonValueKind.Number && chatIdElem.TryGetUInt32(out var chatId))
-                        return chatId;
-
-                    if (chatIdElem.ValueKind == JsonValueKind.Object)
-                    {
-                        if (chatIdElem.TryGetProperty("id", out var chatObjIdElem) && chatObjIdElem.TryGetUInt32(out var chatObjId))
-                            return chatObjId;
-                    }
-                }
-
-                if (root.TryGetProperty("id", out var idElem) && idElem.TryGetUInt32(out var id))
-                    return id;
-
-                if (root.TryGetProperty("chat", out var chatElem))
-                {
-                    if (chatElem.ValueKind == JsonValueKind.Object)
-                    {
-                        if (chatElem.TryGetProperty("chat_id", out var nestedChatIdElem) && nestedChatIdElem.TryGetUInt32(out var nestedChatId))
-                            return nestedChatId;
-
-                        if (chatElem.TryGetProperty("id", out var nestedIdElem) && nestedIdElem.TryGetUInt32(out var nestedId))
-                            return nestedId;
-                    }
-                }
-
-                Console.WriteLine("[ChatService.CreateChatAsync] Не удалось извлечь chat_id/id из ответа сервера");
+                Console.WriteLine("[ChatService.CreateChatAsync] Не удалось извлечь chat_id из ответа");
                 return null;
             }
             catch (Exception ex)
@@ -379,17 +196,155 @@ namespace Sup.Services
             }
         }
 
+        public async Task<uint?> CreateGroupChatAsync(IEnumerable<uint> memberIds)
+        {
+            try
+            {
+                var ids = memberIds.Where(id => id > 0).Distinct().ToList();
+                if (_currentUserId == 0 || ids.Count < 2)
+                    return null;
+
+                var request = CreateGroupChatRequest.FromIds(ids);
+                var json = JsonSerializer.Serialize(request, _jsonOptions);
+                var url = $"{_messageServiceBaseUrl}/chats/group";
+                var resp = await SendWithUserHeaderAsync(
+                    HttpMethod.Post,
+                    url,
+                    new StringContent(json, Encoding.UTF8, "application/json"));
+
+                if (!resp.IsSuccessStatusCode)
+                {
+                    var errorBody = await resp.Content.ReadAsStringAsync();
+                    Console.WriteLine($"[ChatService.CreateGroupChatAsync] POST {url} -> {resp.StatusCode}. Body: {errorBody}");
+                    return null;
+                }
+
+                var respJson = await resp.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(respJson);
+                if (!TryExtractChatId(doc.RootElement, out var chatId))
+                {
+                    Console.WriteLine("[ChatService.CreateGroupChatAsync] Не удалось извлечь chat_id из ответа");
+                    return null;
+                }
+
+                var seededParticipants = ids
+                    .Select(id => new ChatParticipantDto
+                    {
+                        Id = id,
+                        Username = _userNameCache.TryGetValue(id, out var name) ? name : string.Empty
+                    })
+                    .ToList();
+                seededParticipants.Insert(0, new ChatParticipantDto
+                {
+                    Id = _currentUserId,
+                    Username = _userNameCache.TryGetValue(_currentUserId, out var currentName) ? currentName : string.Empty
+                });
+
+                _chatParticipantsCache[chatId] = await HydrateParticipantsAsync(seededParticipants);
+                return chatId;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChatService.CreateGroupChatAsync] Исключение: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<List<ChatParticipantDto>> GetChatMembersAsync(uint chatId)
+        {
+            if (chatId == 0 || _currentUserId == 0)
+                return new List<ChatParticipantDto>();
+
+            if (_chatParticipantsCache.TryGetValue(chatId, out var cachedMembers) && cachedMembers.Count > 0)
+                return CloneParticipants(cachedMembers);
+
+            try
+            {
+                var url = $"{_messageServiceBaseUrl}/chats/{chatId}/members";
+                var response = await SendWithUserHeaderAsync(HttpMethod.Get, url);
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"[ChatService.GetChatMembersAsync] GET {url} -> {response.StatusCode}");
+                    return new List<ChatParticipantDto>();
+                }
+
+                var content = await response.Content.ReadAsStringAsync();
+                List<ChatParticipantDto> members;
+                try
+                {
+                    var membersResponse = JsonSerializer.Deserialize<GetChatMembersResponse>(content, _jsonOptions);
+                    members = membersResponse?.Members ?? new List<ChatParticipantDto>();
+                }
+                catch
+                {
+                    members = new List<ChatParticipantDto>();
+                }
+
+                if (members.Count == 0)
+                {
+                    using var doc = JsonDocument.Parse(content);
+                    if (doc.RootElement.TryGetProperty("members", out var membersElem) && membersElem.ValueKind == JsonValueKind.Array)
+                        members = ParseMembers(membersElem);
+                }
+
+                var hydratedMembers = await HydrateParticipantsAsync(members);
+                _chatParticipantsCache[chatId] = hydratedMembers;
+                return CloneParticipants(hydratedMembers);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChatService.GetChatMembersAsync] Исключение: {ex.Message}");
+                return new List<ChatParticipantDto>();
+            }
+        }
+
+        public async Task<List<ChatParticipantDto>> GetChatParticipantsAsync(uint chatId)
+        {
+            return await GetChatMembersAsync(chatId);
+        }
+
+        public async Task<bool> AddUsersToChatAsync(uint chatId, IEnumerable<uint> userIds)
+        {
+            try
+            {
+                var ids = userIds.Where(id => id > 0).Distinct().ToList();
+                if (_currentUserId == 0 || chatId == 0 || ids.Count == 0)
+                    return false;
+
+                var request = AddUsersToChatRequest.FromIds(ids);
+                var json = JsonSerializer.Serialize(request, _jsonOptions);
+                var url = $"{_messageServiceBaseUrl}/chats/{chatId}/members";
+                var resp = await SendWithUserHeaderAsync(
+                    HttpMethod.Post,
+                    url,
+                    new StringContent(json, Encoding.UTF8, "application/json"));
+
+                if (!resp.IsSuccessStatusCode)
+                {
+                    var errorBody = await resp.Content.ReadAsStringAsync();
+                    Console.WriteLine($"[ChatService.AddUsersToChatAsync] POST {url} -> {resp.StatusCode}. Body: {errorBody}");
+                    return false;
+                }
+
+                _chatParticipantsCache.Remove(chatId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChatService.AddUsersToChatAsync] Исключение: {ex.Message}");
+                return false;
+            }
+        }
+
         public void PreCacheChatInfo(uint chatId, uint otherUserId, string username)
         {
             _chatToOtherUserIdCache[chatId] = otherUserId;
             _userNameCache[otherUserId] = username;
-            Console.WriteLine($"[ChatService.PreCacheChatInfo] Кэшировано: chatId={chatId}, otherUserId={otherUserId}, username={username}");
         }
 
         public Task<uint> GetOtherUserIdForChat(uint chatId)
         {
-            // Сначала ищем в загруженных чатах
-            var chat = _userChats.FirstOrDefault(c => c.Id == chatId);
+            var chat = _userChats.FirstOrDefault(c => c.Id == chatId && !c.IsGroup);
             if (chat != null && chat.OtherUserId > 0)
                 return Task.FromResult(chat.OtherUserId);
 
@@ -409,20 +364,20 @@ namespace Sup.Services
                 if (!resp.IsSuccessStatusCode)
                 {
                     var body = await resp.Content.ReadAsStringAsync();
-                    Console.WriteLine($"[ChatService.LoadChatHistoryAsync] GET {url} -> {resp.StatusCode}. Body(первые 200): {body.Substring(0, Math.Min(200, body.Length))}");
+                    Console.WriteLine($"[ChatService.LoadChatHistoryAsync] GET {url} -> {resp.StatusCode}. Body: {body}");
                     return result;
                 }
 
                 var responseContent = await resp.Content.ReadAsStringAsync();
-                var messagesResponse = JsonSerializer.Deserialize<MessagesResponse>(responseContent);
+                var messagesResponse = JsonSerializer.Deserialize<MessagesResponse>(responseContent, _jsonOptions);
                 if (messagesResponse?.Messages != null)
                 {
                     result = messagesResponse.Messages.OrderBy(m => m.CreatedAt).ToList();
-                    var ids = result.Where(m => m.SenderId != _currentUserId).Select(m => m.SenderId).Distinct();
-                    foreach (var id in ids)
+                    var senderIds = result.Where(m => m.SenderId != _currentUserId).Select(m => m.SenderId).Distinct();
+                    foreach (var senderId in senderIds)
                     {
-                        if (!_userNameCache.ContainsKey(id))
-                            await GetUserNameByIdAsync(id);
+                        if (!_userNameCache.ContainsKey(senderId))
+                            await GetUserNameByIdAsync(senderId);
                     }
                 }
             }
@@ -435,38 +390,260 @@ namespace Sup.Services
 
         public async Task<MessageDto?> SendMessageAsync(uint chatId, string content)
         {
-            if (_currentUserId == 0)
-            {
-                Console.WriteLine("[ChatService.SendMessageAsync] currentUserId=0, сообщение не отправлено");
+            if (_currentUserId == 0 || chatId == 0 || string.IsNullOrWhiteSpace(content))
                 return null;
+
+            Console.WriteLine("[ChatService.SendMessageAsync] REST-эндпоинт отправки сообщения отсутствует, используем WebSocket fallback");
+            return null;
+        }
+
+        public async Task<string?> GetUserNameByIdAsync(uint userId)
+        {
+            if (_userNameCache.TryGetValue(userId, out var cached))
+                return cached;
+
+            try
+            {
+                var url = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(userId.ToString())}?page=0&size=100";
+                var response = await _httpClient.GetAsync(url);
+                if (response.IsSuccessStatusCode)
+                {
+                    using var stream = await response.Content.ReadAsStreamAsync();
+                    var resp = await JsonSerializer.DeserializeAsync<SearchUsersResponse>(stream, _jsonOptions);
+                    var user = resp?.Users?.FirstOrDefault(u => u.Id == userId);
+                    if (user != null)
+                    {
+                        _userNameCache[userId] = user.Username;
+                        return user.Username;
+                    }
+                }
+
+                var searchTerms = "abcdefghijklmnopqrstuvwxyz0123456789".Select(c => c.ToString());
+                var tasks = searchTerms.Select(async term =>
+                {
+                    try
+                    {
+                        var searchUrl = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(term)}?page=0&size=1000";
+                        var resp2 = await _httpClient.GetAsync(searchUrl);
+                        if (resp2.IsSuccessStatusCode)
+                        {
+                            using var stream2 = await resp2.Content.ReadAsStreamAsync();
+                            var sr = await JsonSerializer.DeserializeAsync<SearchUsersResponse>(stream2, _jsonOptions);
+                            return sr?.Users?.FirstOrDefault(u => u.Id == userId);
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    return null;
+                });
+
+                var results = await Task.WhenAll(tasks);
+                var found = results.FirstOrDefault(u => u != null);
+                if (found != null)
+                {
+                    _userNameCache[userId] = found.Username;
+                    return found.Username;
+                }
+            }
+            catch
+            {
             }
 
-            if (chatId == 0 || string.IsNullOrWhiteSpace(content))
-                return null;
-
-            Console.WriteLine("[ChatService.SendMessageAsync] В актуальном Swagger message-service REST-эндпоинт отправки сообщения не опубликован, используем WebSocket fallback");
             return null;
+        }
+
+        public async Task<uint?> GetUserIdByNameAsync(string name)
+        {
+            try
+            {
+                var url = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(name)}?page=0&size=8";
+                var resp = await _httpClient.GetAsync(url);
+                if (!resp.IsSuccessStatusCode)
+                    return null;
+
+                using var stream = await resp.Content.ReadAsStreamAsync();
+                var result = await JsonSerializer.DeserializeAsync<SearchUsersResponse>(stream, _jsonOptions);
+                var user = result?.Users?.FirstOrDefault(u => u.Username == name);
+                return user?.Id != null ? (uint?)user.Id : null;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         public async Task<bool> PollForChatListChangesAsync()
         {
-            if (_currentUserId == 0) return false;
+            if (_currentUserId == 0)
+                return false;
+
             var response = await SendWithUserHeaderAsync(HttpMethod.Get, $"{_messageServiceBaseUrl}/chats");
-            if (!response.IsSuccessStatusCode) return false;
+            if (!response.IsSuccessStatusCode)
+                return false;
+
             var responseContent = await response.Content.ReadAsStringAsync();
-            var chatsResponse = JsonSerializer.Deserialize<GetUserChatsResponse>(responseContent);
-            if (chatsResponse?.Chats == null) return false;
-            
+            var chatsResponse = JsonSerializer.Deserialize<GetUserChatsResponse>(responseContent, _jsonOptions);
+            if (chatsResponse?.Chats == null)
+                return false;
+
             var set = new HashSet<uint>(chatsResponse.Chats.Select(c => c.Id));
             var lastSet = new HashSet<uint>(_lastChatIds);
-            
+
             if (!set.SetEquals(lastSet))
             {
                 _lastChatIds = chatsResponse.Chats.Select(c => c.Id).ToList();
                 _userChats = await LoadChatDetailsAsync(chatsResponse.Chats);
                 return true;
             }
+
             return false;
+        }
+
+        private async Task<uint?> GetChatInfoAsync(uint chatId)
+        {
+            try
+            {
+                var members = await GetChatMembersAsync(chatId);
+                var otherUserId = members
+                    .Select(member => member.Id)
+                    .FirstOrDefault(id => id > 0 && id != _currentUserId);
+                return otherUserId > 0 ? otherUserId : null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChatService.GetChatInfoAsync] Ошибка: {ex.Message}");
+                return null;
+            }
+        }
+
+        private async Task<List<ChatParticipantDto>> HydrateParticipantsAsync(IEnumerable<ChatParticipantDto> participants)
+        {
+            var hydrated = participants
+                .Where(participant => participant.Id > 0)
+                .GroupBy(participant => participant.Id)
+                .Select(group => new ChatParticipantDto
+                {
+                    Id = group.Key,
+                    Username = group.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.Username))?.Username ?? string.Empty
+                })
+                .ToList();
+
+            foreach (var participant in hydrated)
+            {
+                if (!string.IsNullOrWhiteSpace(participant.Username))
+                {
+                    _userNameCache[participant.Id] = participant.Username;
+                    continue;
+                }
+
+                if (participant.Id == _currentUserId && _userNameCache.TryGetValue(_currentUserId, out var currentUserName))
+                {
+                    participant.Username = currentUserName;
+                    continue;
+                }
+
+                participant.Username = await GetUserNameByIdAsync(participant.Id) ?? $"Пользователь {participant.Id}";
+            }
+
+            return hydrated;
+        }
+
+        private List<ChatParticipantDto> ParseMembers(JsonElement membersArray)
+        {
+            var members = new List<ChatParticipantDto>();
+
+            foreach (var member in membersArray.EnumerateArray())
+            {
+                if (member.ValueKind == JsonValueKind.Number)
+                {
+                    if (member.TryGetUInt32(out var numericId))
+                        members.Add(new ChatParticipantDto { Id = numericId });
+                    continue;
+                }
+
+                if (member.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                try
+                {
+                    var parsedMember = JsonSerializer.Deserialize<ChatParticipantDto>(member.GetRawText(), _jsonOptions) ?? new ChatParticipantDto();
+                    if (parsedMember.Id > 0)
+                        members.Add(parsedMember);
+                }
+                catch
+                {
+                }
+            }
+
+            return members;
+        }
+
+        private static bool TryExtractChatId(JsonElement root, out uint chatId)
+        {
+            chatId = 0;
+
+            if (root.TryGetProperty("chat_id", out var chatIdElem))
+            {
+                if (chatIdElem.ValueKind == JsonValueKind.Number && chatIdElem.TryGetUInt32(out chatId))
+                    return true;
+
+                if (chatIdElem.ValueKind == JsonValueKind.Object &&
+                    chatIdElem.TryGetProperty("id", out var nestedIdElem) &&
+                    nestedIdElem.TryGetUInt32(out chatId))
+                {
+                    return true;
+                }
+            }
+
+            if (root.TryGetProperty("id", out var idElem) && idElem.TryGetUInt32(out chatId))
+                return true;
+
+            if (root.TryGetProperty("chat", out var chatElem) &&
+                chatElem.ValueKind == JsonValueKind.Object &&
+                chatElem.TryGetProperty("id", out var chatObjIdElem) &&
+                chatObjIdElem.TryGetUInt32(out chatId))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private string BuildGroupDisplayName(List<ChatParticipantDto> participants)
+        {
+            var participantNames = participants
+                .Where(participant => participant.Id != _currentUserId)
+                .Select(participant => participant.DisplayName)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct()
+                .ToList();
+
+            if (participantNames.Count == 0)
+                return "Групповой чат";
+
+            if (participantNames.Count == 1)
+                return participantNames[0];
+
+            if (participantNames.Count == 2)
+                return string.Join(", ", participantNames);
+
+            return $"{participantNames[0]}, {participantNames[1]} +{participantNames.Count - 2}";
+        }
+
+        private static string TrimMessage(string content)
+        {
+            return content.Length > 50 ? content.Substring(0, 50) + "..." : content;
+        }
+
+        private static List<ChatParticipantDto> CloneParticipants(IEnumerable<ChatParticipantDto> participants)
+        {
+            return participants.Select(participant => new ChatParticipantDto
+            {
+                Id = participant.Id,
+                Username = participant.Username
+            }).ToList();
         }
 
         private async Task<HttpResponseMessage> SendWithUserHeaderAsync(HttpMethod method, string url, HttpContent? content = null)

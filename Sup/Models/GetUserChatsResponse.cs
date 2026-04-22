@@ -62,6 +62,11 @@ namespace Sup.Models
                             if (DateTime.TryParse(createdElem.GetString(), out var createdAt))
                                 chatInfo.LastMessageTime = createdAt;
                         }
+                        if (root.TryGetProperty("is_group", out var isGroupElem) &&
+                            (isGroupElem.ValueKind == JsonValueKind.True || isGroupElem.ValueKind == JsonValueKind.False))
+                        {
+                            chatInfo.IsGroup = isGroupElem.GetBoolean();
+                        }
 
                         result.Add(chatInfo);
                     }

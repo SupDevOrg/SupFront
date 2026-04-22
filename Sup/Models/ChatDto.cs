@@ -10,6 +10,8 @@ namespace Sup.Models
         public string LastMessage { get; set; } = string.Empty;
         public DateTime LastMessageTime { get; set; }
         public uint OtherUserId { get; set; }
+        public bool IsGroup { get; set; }
         public bool IsPending { get; set; } = false;
+        public List<ChatParticipantDto> Participants { get; set; } = new();
     }
 }

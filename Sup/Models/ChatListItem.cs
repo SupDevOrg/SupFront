@@ -6,5 +6,6 @@ namespace Sup.Models
         public string DisplayName { get; set; } = string.Empty;
         public string LastMessage { get; set; } = string.Empty;
         public string LastMessageTime { get; set; } = string.Empty;
+        public bool IsGroup { get; set; }
     }
 }
