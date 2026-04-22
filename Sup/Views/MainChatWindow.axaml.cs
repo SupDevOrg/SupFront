@@ -532,6 +532,7 @@ namespace Sup.Views
                     {
                         Console.WriteLine($"[OnChatSelected] Открываем WebSocket для чата {selectedChat.ChatId} с пользователем {otherUserId}");
                         await _webSocketService.OpenAsync(selectedChat.ChatId, _currentUserId, otherUserId);
+                        _ = LoadChatUserAvatarAsync(otherUserId);
                     }
 
                     // Подключаемся к сигнальной комнате для получения входящих звонков
@@ -919,7 +920,8 @@ namespace Sup.Views
 
                 _currentChatUserName = item.Username;
                 ChatUserName.Text = item.Username;
-                
+                _ = LoadChatUserAvatarAsync(item.Id);
+
                 var tempChatId = (uint)(Guid.NewGuid().GetHashCode() & 0x7FFFFFFF);
                 var pendingChat = new ChatDto
                 {
@@ -1231,6 +1233,32 @@ namespace Sup.Views
                 AvatarStatusMessage.Text = "Неудачная смена аватарки";
                 AvatarStatusMessage.Foreground = Avalonia.Media.Brushes.Red;
                 ResetAvatarButtonState();
+            }
+        }
+
+        /// <summary>Загружает аватарку собеседника в шапку чата по его userId.</summary>
+        private async Task LoadChatUserAvatarAsync(uint userId)
+        {
+            // Сразу сбрасываем старую аватарку — до первого await, на UI-потоке
+            ChatUserAvatarImage.Source = null;
+
+            try
+            {
+                var userInfo = await _userSearchService.GetUserByIdAsync(userId);
+                if (string.IsNullOrEmpty(userInfo?.AvatarUrl))
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() => ChatUserAvatarImage.Source = null);
+                    return;
+                }
+
+                using var httpClient = new System.Net.Http.HttpClient();
+                var imageData = await httpClient.GetByteArrayAsync(userInfo.AvatarUrl);
+                var bitmap = new Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(imageData));
+                await Dispatcher.UIThread.InvokeAsync(() => ChatUserAvatarImage.Source = bitmap);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LoadChatUserAvatarAsync] Ошибка загрузки аватарки для userId={userId}: {ex.Message}");
             }
         }
 
@@ -1603,6 +1631,9 @@ namespace Sup.Views
                 ChatPanel.IsVisible = true;
                 GlobalSearchPanel.IsVisible = false;
                 FriendsPanel.IsVisible = false;
+
+                // Загружаем аватарку собеседника в шапку
+                _ = LoadChatUserAvatarAsync(friend.Id);
 
                 // Загружаем сообщения для текущего чата (если это реальный чат)
                 if (!_pendingChats.ContainsKey(_currentChatId.Value))
