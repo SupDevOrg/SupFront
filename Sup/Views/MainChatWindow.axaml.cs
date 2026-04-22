@@ -115,6 +115,9 @@ namespace Sup.Views
         {
             SearchTabButton.Click += OnSearchTabClicked;
             FriendsTabButton.Click += OnFriendsTabClicked;
+            CreateGroupButton.Click += OnCreateGroupButtonClicked;
+            BackToChatButton.Click += OnBackToChatClicked;
+            BackFromFriendsButton.Click += OnBackFromFriendsClicked;
             SearchGlobalTextBox.KeyUp += async (s, e) => await OnSearchUsersAsync();
             GlobalUsersListBox.DoubleTapped += OnGlobalUserSelected;
             SettingsButton.Click += OnSettingsClicked;
@@ -1018,6 +1021,12 @@ namespace Sup.Views
             ShowSearchPanel();
         }
 
+        private void OnBackToChatClicked(object? sender, RoutedEventArgs e)
+        {
+            Console.WriteLine("[OnBackToChatClicked] Возврат к чатам");
+            ShowChatPanel();
+        }
+
         private void OnSearchTabClicked(object? sender, RoutedEventArgs e)
         {
             _ = RemoveEmptyPendingChatIfCurrentAsync();
@@ -1044,6 +1053,12 @@ namespace Sup.Views
             RequestsTabButton.Classes.Remove("secondary");
 
             await LoadFriendsAsync();
+        }
+
+        private void OnBackFromFriendsClicked(object? sender, RoutedEventArgs e)
+        {
+            Console.WriteLine("[OnBackFromFriendsClicked] Возврат к чатам из друзей");
+            ShowChatPanel();
         }
 
         private async void OnGlobalUserSelected(object? sender, RoutedEventArgs e)
@@ -1246,22 +1261,6 @@ namespace Sup.Views
             AvatarPanel.IsVisible = false;
             MainPanels.IsVisible = true;
             LeftSearchPanel.IsVisible = true;
-
-            // Если сейчас открыт чат (панель чата видна и есть активный чат), возвращаемся в чат
-            if (ChatPanel.IsVisible && _currentChatId.HasValue)
-            {
-                // Просто показываем панель чата, остальные скрываем
-                ChatPanel.IsVisible = true;
-                GlobalSearchPanel.IsVisible = false;
-                FriendsPanel.IsVisible = false;
-                ResetTabsState();
-            }
-            else
-            {
-                // Иначе переключаемся на панель друзей (как при клике на вкладку "Друзья")
-                ShowFriendsPanel();                      // Устанавливает видимость панелей и активную вкладку в левом меню
-                OnFriendsTabButton2Clicked(FriendsTabButton2, new RoutedEventArgs()); // Активирует вкладку "Друзья" и загружает список
-            }
         }
 
         private async void OnLogoutClicked(object? sender, RoutedEventArgs e)
