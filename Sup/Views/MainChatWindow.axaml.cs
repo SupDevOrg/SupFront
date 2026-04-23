@@ -28,6 +28,7 @@ namespace Sup.Views
         private readonly Dictionary<uint, ISignalingService> _signalingServices = new();
         private readonly HashSet<uint> _activeSignalingRooms = new();
         private readonly IVoiceCallService _voiceCallService;
+        private readonly INotificationService _notificationService;
 
         /// <summary>
         /// Срабатывает когда первоначальная загрузка данных (чаты, профиль) завершена.
@@ -65,7 +66,8 @@ namespace Sup.Views
         private uint _pendingOfferChatId = 0; // новое поле
 
         private readonly Dictionary<uint, SemaphoreSlim> _signalingLocks = new();
-
+        private CancellationTokenSource? _hideNotificationCts;
+        private bool _audioDefaultsSet = false;
         public MainChatWindow() : this("user")
         {
         }
@@ -84,6 +86,7 @@ namespace Sup.Views
                 _webSocketService = new WebSocketService();
                 _friendService = new FriendService();
                 _userAvatarService = new UserAvatarService();
+                _notificationService = new NotificationService();
             }
             catch (Exception ex)
             {
@@ -163,6 +166,8 @@ namespace Sup.Views
             _voiceCallService.OnCallConnected += OnVoiceCallConnected;
             _voiceCallService.OnCallEnded += OnVoiceCallEnded;
             _voiceCallService.OnRelayAudioReady += OnVoiceRelayAudioReady;
+
+            _notificationService.OnNotificationReceived += OnSystemNotificationReceived;
         }
 
         private void SetupGlobalButtonHandlers()
@@ -419,16 +424,20 @@ namespace Sup.Views
                 // Устанавливаем timeout для инициализации
                 using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
 
+
+
                 try
                 {
                     _currentUserId = await _chatService.InitializeUserAsync(_currentUsername);
+                    if (_currentUserId > 0)
+                        _ = _notificationService.StartAsync(_currentUserId);
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[InitializeAsync] Ошибка инициализации пользователя: {ex.Message}");
                     _currentUserId = 0;
                 }
-
+                LoadAudioDevices();
                 Console.WriteLine($"[InitializeAsync] User ID загружен: {_currentUserId}");
 
                 try
@@ -454,7 +463,7 @@ namespace Sup.Views
 
                 // Сигнализируем что основная загрузка завершена
                 await Dispatcher.UIThread.InvokeAsync(() => LoadingCompleted?.Invoke(this, EventArgs.Empty));
-
+                
                 // Открываем панель друзей и выбираем вкладку "Друзья"
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
@@ -1439,7 +1448,7 @@ namespace Sup.Views
 
                     UpdateCallUI(false);
                 }
-
+                _notificationService.Stop();
                 _webSocketService.Close();
                 foreach (var service in _signalingServices.Values)
                 {
@@ -1468,26 +1477,63 @@ namespace Sup.Views
         }
 
         private void LoadAudioDevices()
+{
+    try
+    {
+        Console.WriteLine("[LoadAudioDevices] Загружаем устройства...");
+        var enumerator = new MMDeviceEnumerator();
+        var mics = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
+            .Select(d => d.FriendlyName).ToList();
+        MicrophoneComboBox.ItemsSource = mics;
+        Console.WriteLine($"[LoadAudioDevices] Микрофонов: {mics.Count}");
+
+        var outputs = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
+            .Select(d => d.FriendlyName).ToList();
+        AudioOutputComboBox.ItemsSource = outputs;
+        Console.WriteLine($"[LoadAudioDevices] Выходов: {outputs.Count}");
+
+        // Устанавливаем системные устройства по умолчанию только при первом вызове
+        if (!_audioDefaultsSet)
         {
             try
             {
-                Console.WriteLine("[LoadAudioDevices] Загружаем устройства...");
-                var enumerator = new MMDeviceEnumerator();
-                var mics = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
-                    .Select(d => d.FriendlyName).ToList();
-                MicrophoneComboBox.ItemsSource = mics;
-                Console.WriteLine($"[LoadAudioDevices] Микрофонов: {mics.Count}");
-
-                var outputs = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
-                    .Select(d => d.FriendlyName).ToList();
-                AudioOutputComboBox.ItemsSource = outputs;
-                Console.WriteLine($"[LoadAudioDevices] Выходов: {outputs.Count}");
+                var defaultMic = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
+                var micIndex = mics.IndexOf(defaultMic.FriendlyName);
+                if (micIndex >= 0)
+                {
+                    MicrophoneComboBox.SelectedIndex = micIndex;
+                    _selectedMicIndex = micIndex;
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[LoadAudioDevices] Ошибка: {ex.Message}");
+                Console.WriteLine($"[LoadAudioDevices] Не удалось определить микрофон по умолчанию: {ex.Message}");
             }
+
+            try
+            {
+                var defaultSpeaker = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                var speakerIndex = outputs.IndexOf(defaultSpeaker.FriendlyName);
+                if (speakerIndex >= 0)
+                {
+                    AudioOutputComboBox.SelectedIndex = speakerIndex;
+                    _selectedSpeakerIndex = speakerIndex;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LoadAudioDevices] Не удалось определить динамик по умолчанию: {ex.Message}");
+            }
+
+            _audioDefaultsSet = true;
+            Console.WriteLine($"[LoadAudioDevices] Системные умолч. выбраны: mic={_selectedMicIndex}, speaker={_selectedSpeakerIndex}");
         }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[LoadAudioDevices] Ошибка: {ex.Message}");
+    }
+}
 
         private void OnTestVoiceClicked(object? sender, RoutedEventArgs e)
         {
@@ -2462,6 +2508,118 @@ namespace Sup.Views
                 {
                     await EnsureSignalingRoomConnectedAsync(chat.Id);
                 }
+            }
+        }
+
+
+        private async void OnSystemNotificationReceived(object? sender, NotificationDto notification)
+        {
+            // Загружаем имя отправителя
+            string senderName = $"Пользователь {notification.SenderId}";
+            try
+            {
+                var userInfo = await _userSearchService.GetUserByIdAsync((uint)notification.SenderId);
+                if (!string.IsNullOrWhiteSpace(userInfo?.Username))
+                    senderName = userInfo.Username;
+            }
+            catch { }
+
+            // Определяем тип события для текста
+            string eventText;
+            switch (notification.Type)
+            {
+                case "FRIEND_REQUEST_RECEIVED":
+                    eventText = "Запрос в друзья";
+                    break;
+                case "FRIEND_REQUEST_ACCEPTED":
+                    eventText = "Запрос принят";
+                    break;
+                case "FRIEND_REQUEST_REJECTED":
+                    eventText = "Запрос отклонён";
+                    break;
+                case "MESSAGE_RECEIVED":
+                    eventText = "Новое сообщение";
+                    break;
+                default:
+                    // Если тип неизвестен, но есть payload.message, используем его, иначе просто "Событие"
+                    if (notification.Payload.TryGetValue("message", out var serverMsg))
+                    {
+                        eventText = serverMsg; // например, сервер сам прислал "Новое сообщение"
+                    }
+                    else
+                    {
+                        eventText = "Событие";
+                    }
+                    break;
+            }
+
+            string message = $"{eventText} от {senderName}";
+
+            // Если сервер передал дополнительное сообщение в payload, добавим его
+            if (notification.Payload.TryGetValue("message", out var extra) && !string.IsNullOrWhiteSpace(extra))
+            {
+                // extra может дублировать тип, поэтому добавим только если он не совпадает с eventText
+                if (!string.Equals(extra, eventText, StringComparison.OrdinalIgnoreCase))
+                    message += $"\n{extra}";
+            }
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                NotificationTitle.Text = "Уведомление";
+                NotificationMessage.Text = message;
+                NotificationPopup.IsVisible = true;
+                // Звук вызываем здесь же, в UI-потоке
+                PlayNotificationSound();
+            });
+
+            // Автоскрытие через 5 секунд (с отменой предыдущего таймера)
+            _hideNotificationCts?.Cancel();
+            _hideNotificationCts = new CancellationTokenSource();
+            var token = _hideNotificationCts.Token;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), token);
+                    await Dispatcher.UIThread.InvokeAsync(() => NotificationPopup.IsVisible = false);
+                }
+                catch (OperationCanceledException) { }
+            });
+        }
+
+        private void PlayNotificationSound()
+        {
+            try
+            {
+                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                var resourceName = "Sup.Resources.notification.wav";
+                using var stream = assembly.GetManifestResourceStream(resourceName);
+                if (stream == null)
+                {
+                    Console.WriteLine("[PlayNotificationSound] Ресурс не найден!");
+                    return;
+                }
+
+                // Копируем WAV в память, чтобы избежать проблем с доступом к stream позже
+                using var ms = new System.IO.MemoryStream();
+                stream.CopyTo(ms);
+                ms.Position = 0;
+                using var reader = new NAudio.Wave.WaveFileReader(ms);
+                var output = new NAudio.Wave.WaveOutEvent();
+                output.Init(reader);
+
+                // Освобождаем output только когда проигрывание реально завершится
+                output.PlaybackStopped += (s, e) =>
+                {
+                    try { output.Dispose(); } catch { }
+                };
+
+                output.Play();
+                Console.WriteLine("[PlayNotificationSound] Звук запущен.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[PlayNotificationSound] Ошибка: {ex.GetType().Name}: {ex.Message}");
             }
         }
     }

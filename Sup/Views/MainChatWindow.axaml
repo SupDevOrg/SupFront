@@ -834,10 +834,23 @@
                        Foreground="{StaticResource TextSecondaryBrush}"/>
             <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center">
               <Button x:Name="AcceptCallButton" Content="✔ Принять" Width="140"/>
-              <Button x:Name="RejectCallButton" Content="✖ Отклонитьы" Classes="outlined" Width="140"/>
+              <Button x:Name="RejectCallButton" Content="✖ Отклонить" Classes="outlined" Width="140"/>
             </StackPanel>
           </StackPanel>
         </Border>
+      </Border>
+
+      <!-- Новое всплывающее уведомление -->
+      <Border x:Name="NotificationPopup" IsVisible="False" 
+              HorizontalAlignment="Right" VerticalAlignment="Top" 
+              Background="#333333" CornerRadius="8" Padding="12" 
+              Margin="0,10,10,0" Opacity="0.9">
+          <StackPanel>
+              <TextBlock x:Name="NotificationTitle" 
+                         Foreground="White" FontWeight="Bold" Text="Уведомление" />
+              <TextBlock x:Name="NotificationMessage" 
+                         Foreground="#DDDDDD" TextWrapping="Wrap" MaxWidth="250" />
+          </StackPanel>
       </Border>
   </Grid>
 </Window>

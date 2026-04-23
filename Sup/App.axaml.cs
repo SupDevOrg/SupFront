@@ -11,6 +11,8 @@ namespace Sup
         public static string ApiBaseUrl { get; } = "https://ample-determination-dev.up.railway.app/api/v1/";
         public static string WsBaseUrl { get; } = "ws://ample-determination-dev.up.railway.app/api/v1/message/ws";
 
+        public static string NotificationWsUrl { get; } = "ws://nozomi.proxy.rlwy.net:43600/api/v1/notification/ws";
+
         // Сигнальный сервер для WebRTC
         public static string SignalingBaseUrl { get; } = "wss://signalservice-dev.up.railway.app";
         public static string SignalingUsername { get; } = "7093a2c122d9710f49d53b9f";

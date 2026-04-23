@@ -30,4 +30,10 @@
   <ItemGroup>
     <AvaloniaResource Include="Style\**\*.axaml" />
   </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\notification.wav">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+  </ItemGroup>
 </Project>
