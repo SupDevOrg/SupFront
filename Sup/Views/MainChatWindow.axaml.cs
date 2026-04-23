@@ -397,7 +397,7 @@ namespace Sup.Views
                         Console.WriteLine($"[RemoveEmptyPendingChatIfCurrentAsync] Удален временный чат без сообщений: {removedId}");
 
                         var chats = await _chatService.GetUserChatsAsync();
-                        await Dispatcher.UIThread.InvokeAsync(() => UpdateChatsList(chats));
+                        await Dispatcher.UIThread.InvokeAsync(async () => await UpdateChatsListAsync(chats));
                     }
                 }
             }
@@ -431,8 +431,7 @@ namespace Sup.Views
                 try
                 {
                     var chats = await _chatService.GetUserChatsAsync();
-                    await Dispatcher.UIThread.InvokeAsync(() => UpdateChatsList(chats));
-                    await ConnectToAllPrivateChatRoomsAsync(chats);
+                    await Dispatcher.UIThread.InvokeAsync(async () => await UpdateChatsListAsync(chats));
                 }
                 catch (Exception ex)
                 {
@@ -508,7 +507,7 @@ namespace Sup.Views
             }
         }
 
-        private void UpdateChatsList(List<ChatDto> chats)
+        private async Task UpdateChatsListAsync(List<ChatDto> chats)
         {
             try
             {
@@ -572,8 +571,8 @@ namespace Sup.Views
                     });
                 }
 
-                // Подключаем сигнальные комнаты для всех приватных чатов (в фоне)
-                _ = ConnectToNewPrivateChatsAsync(validChats);
+                // Подключаем сигнальные комнаты для всех приватных чатов
+                await ConnectToNewPrivateChatsAsync(validChats);
             }
             catch (Exception ex)
             {
@@ -706,7 +705,7 @@ namespace Sup.Views
             ShowChatPanel();
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                UpdateChatsList(chats);
+                UpdateChatsListAsync(chats);
                 selectedItem = (UsersListBox.ItemsSource as List<ChatListItem>)
                     ?.FirstOrDefault(item => item.ChatId == chatId);
 
@@ -1169,7 +1168,7 @@ namespace Sup.Views
 
                 Console.WriteLine($"[OnGlobalUserSelected] Создан временный чат. ID: {tempChatId}");
                 var chats = await _chatService.GetUserChatsAsync();
-                UpdateChatsList(chats);
+                UpdateChatsListAsync(chats);
             }
         }
 
@@ -1770,7 +1769,7 @@ namespace Sup.Views
                 {
                     Console.WriteLine("[OnChatListPollingAsync] Обнаружено изменение в списке чатов");
                     var chats = await _chatService.GetUserChatsAsync();
-                    await Dispatcher.UIThread.InvokeAsync(() => UpdateChatsList(chats));
+                    await Dispatcher.UIThread.InvokeAsync(async () => await UpdateChatsListAsync(chats));
                     // Дублирование не обязательно, UpdateChatsList уже делает подключение
                 }
             }
@@ -2091,7 +2090,7 @@ namespace Sup.Views
                 });
 
                 var chats = await _chatService.GetUserChatsAsync();
-                UpdateChatsList(chats);
+                UpdateChatsListAsync(chats);
             }
         }
 

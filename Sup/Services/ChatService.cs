@@ -396,6 +396,14 @@ namespace Sup.Services
                 if (!resp.IsSuccessStatusCode)
                 {
                     var body = await resp.Content.ReadAsStringAsync();
+                    // Сервер отвечает 400 "page number must be less than total pages" для пустых чатов —
+                    // это нормально для только что созданных переписок, не шумим в логах.
+                    if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest &&
+                        body.IndexOf("page number must be less than total pages", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        return result;
+                    }
+
                     Console.WriteLine($"[ChatService.LoadChatHistoryAsync] GET {url} -> {resp.StatusCode}. Body: {body}");
                     return result;
                 }
@@ -431,56 +439,38 @@ namespace Sup.Services
 
         public async Task<string?> GetUserNameByIdAsync(uint userId)
         {
+            if (userId == 0)
+                return null;
+
             if (_userNameCache.TryGetValue(userId, out var cached))
                 return cached;
 
             try
             {
-                var url = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(userId.ToString())}?page=0&size=100";
+                // Используем правильный эндпоинт получения пользователя по ID
+                // (тот же, что и в FriendService.GetUsernameByIdAsync).
+                // Старый код дёргал поисковый эндпоинт /user/{query}, передавая туда userId
+                // как поисковую подстроку — что для числовых ID почти никогда не возвращало
+                // результат, и чаты оставались с заглушкой "Чат N".
+                var url = $"{App.ApiBaseUrl}user/id/{userId}";
                 var response = await _httpClient.GetAsync(url);
-                if (response.IsSuccessStatusCode)
+                if (!response.IsSuccessStatusCode)
                 {
-                    using var stream = await response.Content.ReadAsStreamAsync();
-                    var resp = await JsonSerializer.DeserializeAsync<SearchUsersResponse>(stream, _jsonOptions);
-                    var user = resp?.Users?.FirstOrDefault(u => u.Id == userId);
-                    if (user != null)
-                    {
-                        _userNameCache[userId] = user.Username;
-                        return user.Username;
-                    }
+                    Console.WriteLine($"[ChatService.GetUserNameByIdAsync] GET {url} -> {response.StatusCode}");
+                    return null;
                 }
 
-                var searchTerms = "abcdefghijklmnopqrstuvwxyz0123456789".Select(c => c.ToString());
-                var tasks = searchTerms.Select(async term =>
+                using var stream = await response.Content.ReadAsStreamAsync();
+                var user = await JsonSerializer.DeserializeAsync<UserDto>(stream, _jsonOptions);
+                if (user != null && !string.IsNullOrWhiteSpace(user.Username))
                 {
-                    try
-                    {
-                        var searchUrl = $"{App.ApiBaseUrl}user/{Uri.EscapeDataString(term)}?page=0&size=1000";
-                        var resp2 = await _httpClient.GetAsync(searchUrl);
-                        if (resp2.IsSuccessStatusCode)
-                        {
-                            using var stream2 = await resp2.Content.ReadAsStreamAsync();
-                            var sr = await JsonSerializer.DeserializeAsync<SearchUsersResponse>(stream2, _jsonOptions);
-                            return sr?.Users?.FirstOrDefault(u => u.Id == userId);
-                        }
-                    }
-                    catch
-                    {
-                    }
-
-                    return null;
-                });
-
-                var results = await Task.WhenAll(tasks);
-                var found = results.FirstOrDefault(u => u != null);
-                if (found != null)
-                {
-                    _userNameCache[userId] = found.Username;
-                    return found.Username;
+                    _userNameCache[userId] = user.Username;
+                    return user.Username;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine($"[ChatService.GetUserNameByIdAsync] Исключение: {ex.Message}");
             }
 
             return null;
