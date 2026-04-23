@@ -203,12 +203,12 @@
                         Margin="0,0,0,8">
                   <Grid ColumnDefinitions="*,Auto">
                     <TextBlock x:Name="CallStatusText"
-                               Text="📞 Звонок..."
+                               Text="Звонок..."
                                VerticalAlignment="Center"
                                Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Button x:Name="EndCallButton"
                             Grid.Column="1"
-                            Content="📵 Завершить"
+                            Content="Завершить"
                             Classes="outlined"
                             Padding="8,4"
                             FontSize="13"

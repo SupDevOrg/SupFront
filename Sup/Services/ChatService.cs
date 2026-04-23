@@ -83,7 +83,9 @@ namespace Sup.Services
                     var lastMessageTime = chatInfo.LastMessageTime != default ? chatInfo.LastMessageTime : DateTime.Now;
                     var participants = new List<ChatParticipantDto>();
                     uint otherUserId = 0;
+                    string chatName;
 
+                    // Пробуем найти собеседника через историю сообщений
                     var messages = await LoadChatHistoryAsync(chatInfo.Id, 1, 20);
                     if (messages.Count > 0)
                     {
@@ -107,35 +109,65 @@ namespace Sup.Services
                     {
                         participants = await GetChatParticipantsAsync(chatInfo.Id);
                     }
-                    else
+                    else // Приватный чат
                     {
+                        // Если otherUserId ещё не найден, пытаемся получить его через API участников
                         if (!_chatToOtherUserIdCache.TryGetValue(chatInfo.Id, out otherUserId))
                         {
+                            // 1-я попытка: быстрый метод GetChatInfoAsync
                             otherUserId = await GetChatInfoAsync(chatInfo.Id) ?? 0;
+
+                            // 2-я попытка: если не вышло, запрашиваем участников напрямую
+                            if (otherUserId == 0)
+                            {
+                                var members = await GetChatMembersAsync(chatInfo.Id);
+                                otherUserId = members
+                                    .Where(m => m.Id != _currentUserId)
+                                    .Select(m => m.Id)
+                                    .FirstOrDefault();  // 0 если не нашли
+                            }
+
                             if (otherUserId > 0)
                                 _chatToOtherUserIdCache[chatInfo.Id] = otherUserId;
                         }
                     }
 
-                    var chatName = chatInfo.Name;
+                    // Формируем отображаемое имя
                     if (chatInfo.IsGroup)
                     {
-                        chatName = !string.IsNullOrWhiteSpace(chatName)
-                            ? chatName
+                        chatName = !string.IsNullOrWhiteSpace(chatInfo.Name)
+                            ? chatInfo.Name
                             : BuildGroupDisplayName(participants);
                     }
-                    else
+                    else // Приватный чат
                     {
-                        if (!string.IsNullOrWhiteSpace(chatName) && otherUserId > 0)
+                        // Определяем имя собеседника
+                        if (otherUserId > 0)
                         {
-                            _userNameCache[otherUserId] = chatName;
-                        }
-                        else if (otherUserId > 0)
-                        {
-                            chatName = await GetUserNameByIdAsync(otherUserId) ?? $"Чат {chatInfo.Id}";
+                            // Если бэкенд прислал осмысленное имя (не "Чат X"), используем его
+                            if (!string.IsNullOrWhiteSpace(chatInfo.Name) && !chatInfo.Name.StartsWith("Чат "))
+                            {
+                                chatName = chatInfo.Name;
+                                _userNameCache[otherUserId] = chatName;
+                            }
+                            else
+                            {
+                                // Запрашиваем имя у сервера (или из кэша)
+                                var resolvedName = await GetUserNameByIdAsync(otherUserId);
+                                if (!string.IsNullOrWhiteSpace(resolvedName))
+                                {
+                                    chatName = resolvedName;
+                                }
+                                else
+                                {
+                                    // Если имя вообще не удалось получить — fallback
+                                    chatName = $"Чат {chatInfo.Id}";
+                                }
+                            }
                         }
                         else
                         {
+                            // Собеседник не определён – редкий случай, оставляем заглушку
                             chatName = $"Чат {chatInfo.Id}";
                         }
                     }
