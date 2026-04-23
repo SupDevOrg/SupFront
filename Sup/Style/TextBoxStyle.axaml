@@ -10,12 +10,6 @@
     <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
     <Setter Property="Padding" Value="14,10"/>
     <Setter Property="CaretBrush" Value="{StaticResource PrimaryBrush}"/>
-    <Setter Property="Transitions">
-      <Transitions>
-        <BrushTransition Property="BorderBrush" Duration="0:0:0.2"/>
-        <BrushTransition Property="Background" Duration="0:0:0.2"/>
-      </Transitions>
-    </Setter>
   </Style>
 
   <Style Selector="TextBox:focus">

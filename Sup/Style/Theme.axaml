@@ -3,9 +3,9 @@
   <Color x:Key="PrimaryColor">#FF6366F1</Color>
   <Color x:Key="PrimaryColorHover">#FF4F46E5</Color>
   <Color x:Key="PrimaryColorPressed">#FF4338CA</Color>
-  <Color x:Key="SecondaryColor">#FFF472B6</Color>
-  <Color x:Key="SecondaryColorHover">#FFEC4899</Color>
-  <Color x:Key="SecondaryColorPressed">#FFDB2777</Color>
+  <Color x:Key="SecondaryColor">#331E3A8A</Color>
+  <Color x:Key="SecondaryColorHover">#331E3A8A</Color>
+  <Color x:Key="SecondaryColorPressed">#331E3A8A</Color>
   <Color x:Key="SurfaceColor">#FF111827</Color>
   <Color x:Key="SurfaceAltColor">#FF0F172A</Color>
   <Color x:Key="SurfaceOverlayColor">#FF1E293B</Color>

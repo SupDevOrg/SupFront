@@ -417,6 +417,7 @@ namespace Sup.Views
 
         private async Task InitializeAsync()
         {
+            this.WindowState = WindowState.Maximized;
             try
             {
                 Console.WriteLine($"[InitializeAsync] Начинаем инициализацию пользователя: {_currentUsername}");

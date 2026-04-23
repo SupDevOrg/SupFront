@@ -4,10 +4,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Sup"
         xmlns:models="clr-namespace:Sup.Models"
-        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="720"
+        mc:Ignorable="d" d:DesignWidth="1400" d:DesignHeight="700"
         x:Class="Sup.Views.MainChatWindow"
         Title="Sup"
-        MinWidth="1180"
+        MinWidth="1400"
         MinHeight="700">
 
   <Window.Resources>
@@ -622,7 +622,9 @@
             <Button x:Name="LogoutButton"
                     Content="Выйти из аккаунта"
                     Classes="outlined"
-                    HorizontalAlignment="Stretch"/>
+                    HorizontalAlignment="Stretch"
+                    Background="Red">
+            </Button>
           </StackPanel>
         </Border>
 

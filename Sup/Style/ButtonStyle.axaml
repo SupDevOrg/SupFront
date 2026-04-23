@@ -14,14 +14,6 @@
     <Setter Property="MinWidth" Value="120"/>
     <Setter Property="MinHeight" Value="48"/>
     <Setter Property="Effect" Value="{StaticResource SoftShadowEffect}"/>
-    <Setter Property="Transitions">
-      <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.18"/>
-        <BrushTransition Property="Foreground" Duration="0:0:0.18"/>
-        <BrushTransition Property="BorderBrush" Duration="0:0:0.18"/>
-        <DoubleTransition Property="Opacity" Duration="0:0:0.18"/>
-      </Transitions>
-    </Setter>
   </Style>
 
   <Style Selector="Button:pointerover">
@@ -51,19 +43,6 @@
 
   <Style Selector="Button.secondary:pressed">
     <Setter Property="Background" Value="{StaticResource SecondaryPressedBrush}"/>
-  </Style>
-
-  <Style Selector="Button.outlined">
-    <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="BorderThickness" Value="1.5"/>
-    <Setter Property="BorderBrush" Value="{StaticResource OutlineBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-    <Setter Property="Effect" Value="{x:Null}"/>
-  </Style>
-
-  <Style Selector="Button.outlined:pointerover">
-    <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
   </Style>
 
   <Style Selector="Button.outlined:pressed">
