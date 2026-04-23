@@ -12,6 +12,7 @@ using Sup.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Sup.Views
@@ -62,6 +63,8 @@ namespace Sup.Views
         // SDP входящего звонка, ожидающего принятия
         private string _pendingOfferSdp = string.Empty;
         private uint _pendingOfferChatId = 0; // новое поле
+
+        private readonly Dictionary<uint, SemaphoreSlim> _signalingLocks = new();
 
         public MainChatWindow() : this("user")
         {
@@ -478,32 +481,49 @@ namespace Sup.Views
 
         private async Task EnsureSignalingRoomConnectedAsync(uint chatId)
         {
-            if (_activeSignalingRooms.Contains(chatId))
-                return;
-
-            if (!_signalingServices.TryGetValue(chatId, out var service))
+            // Блокировка на уровне chatId для предотвращения гонки
+            if (!_signalingLocks.TryGetValue(chatId, out var semaphore))
             {
-                service = new SignalingService();
-                _signalingServices[chatId] = service;
-
-                service.OnOfferReceived += (s, sdp) => OnSignalingOfferReceivedForChat(chatId, sdp);
-                service.OnAnswerReceived += (s, sdp) => OnSignalingAnswerReceivedForChat(chatId, sdp);
-                service.OnIceCandidateReceived += (s, e) => OnSignalingIceCandidateReceivedForChat(chatId, e);
-                service.OnPeerLeft += (s, e) => OnSignalingPeerLeftForChat(chatId, e);
-                service.OnAudioReceived += (s, data) => _voiceCallService.ReceiveRelayAudio(data);
+                semaphore = new SemaphoreSlim(1, 1);
+                _signalingLocks[chatId] = semaphore;
             }
 
+            await semaphore.WaitAsync();
             try
             {
-                var roomId = $"chat-{chatId}";
-                await service.ConnectAsync(roomId, _currentUserId.ToString());
-                _activeSignalingRooms.Add(chatId);
-                Console.WriteLine($"[MainChatWindow] Подключены к сигнальной комнате чата {chatId}");
+                if (_activeSignalingRooms.Contains(chatId))
+                    return;
+
+                if (!_signalingServices.TryGetValue(chatId, out var service))
+                {
+                    service = new SignalingService();
+                    _signalingServices[chatId] = service;
+
+                    service.OnOfferReceived += (s, sdp) => OnSignalingOfferReceivedForChat(chatId, sdp);
+                    service.OnAnswerReceived += (s, sdp) => OnSignalingAnswerReceivedForChat(chatId, sdp);
+                    service.OnIceCandidateReceived += (s, e) => OnSignalingIceCandidateReceivedForChat(chatId, e);
+                    service.OnPeerLeft += (s, e) => OnSignalingPeerLeftForChat(chatId, e);
+                    service.OnAudioReceived += (s, data) => _voiceCallService.ReceiveRelayAudio(data);
+                }
+
+                try
+                {
+                    var roomId = $"chat-{chatId}";
+                    await service.ConnectAsync(roomId, _currentUserId.ToString());
+                    _activeSignalingRooms.Add(chatId);
+                    Console.WriteLine($"[MainChatWindow] Подключены к сигнальной комнате чата {chatId}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[MainChatWindow] Ошибка подключения к комнате чата {chatId}: {ex.Message}");
+                    // Удаляем только если этот сервис всё ещё актуален в словаре
+                    if (_signalingServices.TryGetValue(chatId, out var current) && current == service)
+                        _signalingServices.Remove(chatId);
+                }
             }
-            catch (Exception ex)
+            finally
             {
-                Console.WriteLine($"[MainChatWindow] Ошибка подключения к комнате чата {chatId}: {ex.Message}");
-                _signalingServices.Remove(chatId);
+                semaphore.Release();
             }
         }
 
@@ -1145,6 +1165,19 @@ namespace Sup.Views
                 Console.WriteLine($"[OnGlobalUserSelected] Выбран пользователь: {item.Username}");
 
                 ShowChatPanel();
+
+                // Проверим, есть ли уже реальный чат с этим пользователем
+                var existingChats = await _chatService.GetUserChatsAsync();
+                var realChat = existingChats.FirstOrDefault(c => c.OtherUserId == item.Id && !c.IsGroup && !c.IsPending);
+
+                if (realChat != null)
+                {
+                    Console.WriteLine($"[OnGlobalUserSelected] Найден существующий чат с {item.Username}. ID: {realChat.Id}");
+                    await SelectChatByIdAsync(realChat.Id);
+                    return;
+                }
+
+                // Если реального чата нет — создаём временный
                 ConfigurePrivateChatHeader(item.Username, item.Id);
 
                 var tempChatId = (uint)(Guid.NewGuid().GetHashCode() & 0x7FFFFFFF);
