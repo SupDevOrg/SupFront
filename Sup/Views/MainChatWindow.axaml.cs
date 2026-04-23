@@ -1110,9 +1110,12 @@ namespace Sup.Views
             userResult.HasOutgoingRequest = status?.Status == "PENDING" && status.IsOutgoingRequest;
             
             Console.WriteLine($"[UpdateSearchResultUserStatusAsync] Статус обновлен: IsFriend={userResult.IsFriend}, HasIncoming={userResult.HasIncomingRequest}, HasOutgoing={userResult.HasOutgoingRequest}");
-            
+
             // Обновляем список в UI
-            GlobalUsersListBox.ItemsSource = new List<SearchResultItemDto>(_currentSearchResults);
+            if (!(_currentSearchResults is null))
+            {
+                GlobalUsersListBox.ItemsSource = new List<SearchResultItemDto>(_currentSearchResults);
+            }
             AttachSearchResultButtonHandlers();
         }
 
@@ -1343,6 +1346,10 @@ namespace Sup.Views
             MainPanels.IsVisible = false;
             LeftSearchPanel.IsVisible = false;
             SettingsPanel.IsVisible = true;
+
+            VoicePanel.IsVisible = true;
+            AvatarPanel.IsVisible = false;
+            LoadAudioDevices();
         }
 
         private void OnVoiceSettingsClicked(object? sender, RoutedEventArgs e)

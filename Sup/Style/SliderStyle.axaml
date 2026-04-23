@@ -11,4 +11,3 @@
     <Setter Property="Background" Value="{StaticResource PrimaryHoverBrush}"/>
   </Style>
 </Styles>
-

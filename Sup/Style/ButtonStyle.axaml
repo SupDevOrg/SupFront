@@ -50,4 +50,3 @@
     <Setter Property="Foreground" Value="{StaticResource PrimaryPressedBrush}"/>
   </Style>
 </Styles>
-
